@@ -1,0 +1,21 @@
+{
+  "package_name": "TrustedRelay",
+  "version": "0.0.1",
+  "description": "Trusted relaying of ERC20 or ERC721 tokens between networks",
+  "authors": [
+    "Alex Miller <alex.miller@consensys.net>"
+  ],
+  "dependencies": {
+    "tokens": "^0.0.3"
+  },
+  "keywords": [
+    "ethereum",
+    "relay",
+    "blockchain",
+    "network"
+  ],
+  "license": "MIT",
+  "sources": [
+    "./contracts/TrustedRelay.sol",
+  ]
+}

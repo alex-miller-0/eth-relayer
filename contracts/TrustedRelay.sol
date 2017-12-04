@@ -9,7 +9,7 @@
 // the tokens (but they would be locked up).
 pragma solidity ^0.4.18;
 
-import "tokens/Token.sol";  // truffle package (install with `truffle install tokens`)
+import "./Token.sol";  // truffle package (install with `truffle install tokens`)
 
 contract TrustedRelay {
   uint public fee;
@@ -61,7 +61,8 @@ contract TrustedRelay {
     assert(chainIds[0] == chainId);
     address sender = ecrecover(m, v, r, s);
     assert(msg.sender == sender);
-    Token t = Token(token);
+    Token t;
+    t = Token(token);
     t.transfer(address(this), amount);
     address(this).transfer(msg.value);
     Deposit(msg.sender, token, chainIds[1], amount, now);
@@ -78,9 +79,10 @@ contract TrustedRelay {
     assert(addrs[1] == sender);
     address mappedToken = tokens[chainIds[0]][addrs[1]];
     assert(mappedToken != address(0));
-    Token t = Token(mappedToken);
-    assert(t.balanceOf(address(this)) >= amount);
-    t.transfer(sender, amount);
+    Token t2;
+    t2 = Token(mappedToken);
+    assert(t2.balanceOf(address(this)) >= amount);
+    t2.transfer(sender, amount);
     RelayedDeposit(sender, addrs[0], mappedToken, chainIds[0], amount, now);
   }
 
@@ -93,8 +95,9 @@ contract TrustedRelay {
     assert(chainIds[0] == chainId);
     address sender = ecrecover(m, v, r, s);
     assert(addrs[1] == sender);
-    Token t = Token(addrs[0]);
-    t.transfer(sender, amount);
+    Token t3;
+    t3 = Token(addrs[0]);
+    t3.transfer(sender, amount);
     UndoDeposit(sender, addrs[0], chainIds[1], amount, now);
   }
 

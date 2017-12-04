@@ -1,0 +1,31 @@
+{
+  "name": "eth-relayer",
+  "version": "1.0.0",
+  "description": "Trusted relayer contract for Ethereum",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alex-miller-0/eth-relayer.git"
+  },
+  "keywords": [
+    "Ethereum",
+    "Smart",
+    "Contract",
+    "Relay"
+  ],
+  "author": "Alex Miller",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/alex-miller-0/eth-relayer/issues"
+  },
+  "homepage": "https://github.com/alex-miller-0/eth-relayer#readme",
+  "dependencies": {
+    "truffle-hdwallet-provider": "0.0.3"
+  }
+}
