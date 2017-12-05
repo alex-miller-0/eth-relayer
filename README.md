@@ -9,9 +9,10 @@ All chains are identified by `chainId`, which can be found with `net.version` in
 If you would like to run this contract from this repo and run tests, you can get set up with:
 
 ```
+npm install
 truffle install tokens
 truffle compile
-truffle test
+npm run test
 ```
 
 ## Usage

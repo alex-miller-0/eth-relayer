@@ -13,8 +13,13 @@ import "tokens/Token.sol";  // truffle package (install with `truffle install to
 import "tokens/HumanStandardToken.sol";
 
 contract TrustedRelay {
+
+  //============================================================================
+  // GLOBAL VARIABLES
+  //============================================================================
+
   uint public fee;
-  uint public chainId = 1;
+  uint public chainId;
   mapping (address => bool) owners;
   mapping (address => mapping(address => uint)) balances;
   // Maps originating chain id and token address to new address. This requires
@@ -26,6 +31,11 @@ contract TrustedRelay {
   // whether ether is allowed on this chain for deposits. This would be true
   // if this is a child chain that maps to an ERC20 token on another chain.
   bool public etherAllowed;
+
+
+  //============================================================================
+  // EVENTS AND INIT
+  //============================================================================
 
   event Deposit(address indexed sender, address indexed token, uint indexed toChain, uint amount, uint timestamp);
   event UndoDeposit(address indexed sender, address indexed token, uint indexed toChain, uint amount, uint timestamp);
@@ -39,23 +49,16 @@ contract TrustedRelay {
     NewOwner(msg.sender, now);
   }
 
-  function addOwner(address newOwner) public isOwner {
-    owners[newOwner] = true;
-    NewOwner(newOwner, now);
+  // This can only be done once!
+  function setChainId(uint id) public isOwner {
+    assert(chainId == 0);
+    chainId = id;
   }
 
-  function removeOwner(address oldOwner) public isOwner {
-    owners[oldOwner] = false;
-    RemoveOwner(oldOwner, now);
-  }
 
-  function changeFee(uint newFee) public isOwner {
-    fee = newFee;
-  }
-
-  function changeEtherAllowed(bool allowed) public isOwner {
-    etherAllowed = allowed;
-  }
+  //============================================================================
+  // DEPOSITS AND RELAYS
+  //============================================================================
 
   // Make a deposit to another chain. This locks up the tokens on this chain.
   // They will appear in the other chain for withdrawal.
@@ -132,6 +135,33 @@ contract TrustedRelay {
   }
 
 
+  //============================================================================
+  // OWNER ADMIN FUNCTIONS
+  //============================================================================
+
+  function addOwner(address newOwner) public isOwner {
+    owners[newOwner] = true;
+    NewOwner(newOwner, now);
+  }
+
+  function removeOwner(address oldOwner) public isOwner {
+    owners[oldOwner] = false;
+    RemoveOwner(oldOwner, now);
+  }
+
+  function changeFee(uint newFee) public isOwner {
+    fee = newFee;
+  }
+
+  function changeEtherAllowed(bool allowed) public isOwner {
+    etherAllowed = allowed;
+  }
+
+
+  //============================================================================
+  // CONSTANT FUNCTIONS
+  //============================================================================
+
   function makeChecks(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, uint[2] chainIds)
   public constant returns(address) {
     address sender = hashChecks(m, v, r, s, addrs, amount, chainIds);
@@ -149,6 +179,11 @@ contract TrustedRelay {
     return sender;
   }
 
+
+  function checkIsOwner(address owner) public constant returns (bool) {
+    if (owners[owner] == true) { return true; }
+    return false;
+  }
 
   modifier isOwner() {
     assert(owners[msg.sender] == true);

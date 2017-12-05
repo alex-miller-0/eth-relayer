@@ -1,5 +1,9 @@
-var Migrations = artifacts.require("./Migrations.sol");
+/* global artifacts */
 
-module.exports = function(deployer) {
+const Migrations = artifacts.require('./Migrations.sol');
+const TrustedRelay = artifacts.require('./TrustedRelay.sol');
+
+module.exports = (deployer) => {
   deployer.deploy(Migrations);
+  deployer.deploy(TrustedRelay);
 };
