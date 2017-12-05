@@ -75,18 +75,17 @@ contract TrustedRelay {
 
   // Make a deposit to another chain. This locks up the tokens on this chain.
   // They will appear in the other chain for withdrawal.
-  // chainIds = [ originating, destination]
   // data = [ fee, timestamp ]
-  function depositERC20(bytes32 m, uint8 v, bytes32 r, bytes32 s, address token, uint amount, uint[2] chainIds, uint[2] data)
+  function depositERC20(bytes32 m, uint8 v, bytes32 r, bytes32 s, address token, uint amount, uint toChain, uint[2] data)
   public payable {
-    assert(data[1] > now && data[1] - now < tolerance); // check timestamp
-    assert(data[0] >= fees[chainIds[1]][token]);  // Make sure the fee is high enough
-    address sender = makeChecks(m, v, r, s, [token, msg.sender], amount, chainIds, data);
+    assert(data[1] >= now && data[1] - now < tolerance); // check timestamp
+    assert(data[0] >= fees[toChain][token]);  // Make sure the fee is high enough
+    address sender = hashChecks(m, v, r, s, [token, msg.sender], amount, [chainId, toChain], data);
     Token t;
     t = Token(token);
-    t.transfer(address(this), amount);
-    address(this).transfer(msg.value);
-    Deposit(sender, token, chainIds[1], amount, data[0], data[1], now);
+    t.transferFrom(sender, address(this), amount);
+    Deposit(sender, token, toChain, amount, data[0], data[1], now);
+
     played[m] = true;
   }
 
@@ -95,16 +94,16 @@ contract TrustedRelay {
   // In the case of ether, no amount is specified - it is inferred from msg.value
   // chainIds = [ originating, destination]
   // data = [ fee, timestamp ]
-  function depositEther(bytes32 m, uint8 v, bytes32 r, bytes32 s, uint[2] chainIds, uint[2] data)
+  function depositEther(bytes32 m, uint8 v, bytes32 r, bytes32 s, uint toChain, uint[2] data)
   public payable {
     assert(data[1] > now && data[1] - now < tolerance);
-    assert(data[0] >= fees[chainIds[1]][address(0)]);  // Make sure the fee is high enough
+    assert(data[0] >= fees[toChain][address(0)]);  // Make sure the fee is high enough
     assert(etherAllowed == true);
     assert(msg.value > 0);
     // Make sure there is an ether token on the desired chain
-    assert(ethToken[chainIds[1]] != address(0));
-    address sender = makeChecks(m, v, r, s, [address(0), msg.sender], msg.value, chainIds, data);
-    Deposit(sender, address(0), chainIds[1], msg.value, data[0], data[1], now);
+    assert(ethToken[toChain] != address(0));
+    address sender = hashChecks(m, v, r, s, [address(0), msg.sender], msg.value, [chainId, toChain], data);
+    Deposit(sender, address(0), toChain, msg.value, data[0], data[1], now);
     played[m] = true;
   }
 
@@ -112,22 +111,22 @@ contract TrustedRelay {
   // Unfreeze tokens on this chain.
   // addrs = [ token, originalSender ]
   // data = [ fee, timestamp ]
-  function relayDepositERC20(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, uint[2] chainIds, uint[2] data)
+  function relayDepositERC20(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, uint fromChain, uint[2] data)
   isOwner public {
-    address sender = makeChecks(m, v, r, s, addrs, amount, chainIds, data);
-    if (ethToken[chainIds[0]] == addrs[0]) {
+    address sender = makeChecks(m, v, r, s, addrs, amount, [fromChain, chainId], data);
+    if (ethToken[fromChain] == addrs[0]) {
       // If this is an eth token, reward ether on this chain
       sender.transfer(amount-data[0]);
       msg.sender.transfer(data[0]);
-      RelayedDeposit(sender, addrs[0], address(0), chainIds[0], amount, data[0], data[1], now);
+      RelayedDeposit(sender, addrs[0], address(0), fromChain, amount, data[0], data[1], now);
     } else {
       // Otherwise reward a token
       Token t;
-      t = Token(tokens[chainIds[0]][addrs[0]]);
+      t = Token(tokens[fromChain][addrs[0]]);
       assert(t.balanceOf(address(this)) >= amount);
       t.transfer(sender, amount-data[0]);
       t.transfer(msg.sender, data[0]);
-      RelayedDeposit(sender, addrs[0], tokens[chainIds[0]][addrs[0]], chainIds[0], amount, data[0], data[1], now);
+      RelayedDeposit(sender, addrs[0], tokens[fromChain][addrs[0]], fromChain, amount, data[0], data[1], now);
     }
 
     played[m] = true;
@@ -138,14 +137,14 @@ contract TrustedRelay {
   // addrs = [ token, originalSender ]
   // sig = [ hash, r, s ]
   // data = [ fee, timestamp ]
-  function undoDepositERC20(bytes32[3] sig, uint8 v, address[2] addrs, uint amount, uint[2] chainIds, uint[2] data)
+  function undoDepositERC20(bytes32[3] sig, uint8 v, address[2] addrs, uint amount, uint toChain, uint[2] data)
   isOwner public {
     assert(played[sig[0]] = true);
-    address sender = makeChecks(sig[0], v, sig[1], sig[2], addrs, amount, chainIds, data);
+    address sender = makeChecks(sig[0], v, sig[1], sig[2], addrs, amount, [chainId, toChain], data);
     Token t;
     t = Token(addrs[0]);
     t.transfer(sender, amount);
-    UndoDeposit(sender, addrs[0], chainIds[1], amount, data[0], data[1], now);
+    UndoDeposit(sender, addrs[0], toChain, amount, data[0], data[1], now);
     undone[sig[0]] = true;
   }
 
@@ -210,16 +209,20 @@ contract TrustedRelay {
     return sender;
   }
 
+//    address sender = makeChecks(m, v, r, s, [token, msg.sender], amount, [chainId, toChain], data);
   function hashChecks(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, uint[2] chainIds, uint[2] data)
   public constant returns(address) {
     // Order of items:
-    // <originating chainId>, <destination chainId>, <originating token address>,
-    // <amount of token deposited (atomic units)>, <depositer address>,
+    // <originating chainId>, <destination chainId>,
+    // <originating token address>, <depositer address>
+    // <amount of token deposited (atomic units)>,
     // <fee>, <timestamp>
-    assert(m == keccak256(chainIds[0], chainIds[1], addrs[0], amount, addrs[1], data[0], data[1]));
+    assert(m == keccak256(uint256(chainIds[0]), uint256(chainIds[1]), address(addrs[0]),
+      uint256(amount), address(addrs[1]), uint256(data[0]), uint256(data[1])));
+
     assert(chainIds[0] == chainId);
     address sender = ecrecover(m, v, r, s);
-    assert(addrs[1] == sender);
+    assert(address(addrs[1]) == address(sender));
     return sender;
   }
 
@@ -227,6 +230,10 @@ contract TrustedRelay {
   function checkIsOwner(address owner) public constant returns (bool) {
     if (owners[owner] == true) { return true; }
     return false;
+  }
+
+  function getNow() public constant returns (uint) {
+    return now;
   }
 
   modifier isOwner() {

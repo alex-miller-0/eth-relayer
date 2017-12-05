@@ -11,7 +11,52 @@ If you would like to run this contract from this repo and run tests, you can get
 ```
 npm install
 truffle install tokens
-truffle compile
+```
+
+## Configuration
+
+Configuration is done in two files: `truffle.js` and `secrets.json`.
+
+A minimal `truffle.js` file would look like this:
+
+```
+module.exports = {
+  networks: {
+    development: {
+      host: 'localhost',
+      port: 7545,
+      network_id: '*', // Match any network id
+    },
+  },
+};
+```
+
+I use [Ganache](https://github.com/trufflesuite/ganache/releases) for my primary test chain, which runs on port 7545 by default.
+
+Your `secrets.json` must contain a `mnemonic` and a `hdPath`:
+
+```
+{
+  "mnemonic": "public okay smoke segment forum front animal extra appear online before various cook test arrow",
+  "hdPath": "m/44'/60'/0'/0/"
+}
+```
+
+You can generate a new BIP39 mnemonic [here](https://coinomi.com/recovery-phrase-tool.html). Do not change `hdPath` unless you have a good reason to - changing it will brea the tests.
+
+## Testing
+
+In order to run the tests, you will need two local blockchains running. Assuming you already have Ganache running on port 7545, you can start a new testrpc instance on port 7546 with:
+
+```
+testrpc -p 7546 -m "public okay smoke segment forum front animal extra appear online before various cook test arrow"
+```
+
+*Note: the mnemonic (`-m`) must be the same as the one in your `secrets.json` file and it must also be the same one that seeded your Ganache chain (to change, click on the settings gear and go to accounts & keys).*
+
+You can now run the tests with:
+
+```
 npm run test
 ```
 
