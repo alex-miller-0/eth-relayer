@@ -12,5 +12,10 @@ module.exports = {
       provider: new HDWalletProvider(mnemonic, 'https://ropsten.infura.io/'),
       network_id: 3, // official id of the ropsten network
     },
+    devChild: {
+      host: 'localhost',
+      port: 7546,
+      network_id: '*',
+    },
   },
 };

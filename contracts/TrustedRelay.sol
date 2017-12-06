@@ -236,6 +236,10 @@ contract TrustedRelay {
     return now;
   }
 
+  function getTokenMapping(uint fromChain, address token) public constant returns (address) {
+    return tokens[fromChain][token];
+  }
+
   modifier isOwner() {
     assert(owners[msg.sender] == true);
     _;
