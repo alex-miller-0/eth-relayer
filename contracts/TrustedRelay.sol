@@ -113,13 +113,16 @@ contract TrustedRelay {
   // data = [ fee, timestamp ]
   function relayDepositERC20(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, uint fromChain, uint[2] data)
   isOwner public {
-    address sender = makeChecks(m, v, r, s, addrs, amount, [fromChain, chainId], data);
+
+    address sender = hashChecks(m, v, r, s, addrs, amount, [fromChain, chainId], data);
+    assert(sender == addrs[1]);
     if (ethToken[fromChain] == addrs[0]) {
       // If this is an eth token, reward ether on this chain
       sender.transfer(amount-data[0]);
       msg.sender.transfer(data[0]);
       RelayedDeposit(sender, addrs[0], address(0), fromChain, amount, data[0], data[1], now);
     } else {
+      require(tokens[fromChain][addrs[0]] != address(0));
       // Otherwise reward a token
       Token t;
       t = Token(tokens[fromChain][addrs[0]]);
@@ -128,7 +131,6 @@ contract TrustedRelay {
       t.transfer(msg.sender, data[0]);
       RelayedDeposit(sender, addrs[0], tokens[fromChain][addrs[0]], fromChain, amount, data[0], data[1], now);
     }
-
     played[m] = true;
   }
 
@@ -146,16 +148,6 @@ contract TrustedRelay {
     t.transfer(sender, amount);
     UndoDeposit(sender, addrs[0], toChain, amount, data[0], data[1], now);
     undone[sig[0]] = true;
-  }
-
-  // Recreate a new token based on the parameters of the old one. This new token
-  // only has basic ERC20 functionality and all tokens will be owned by this contract.
-  // Anyone that deposits into the old chain will get an equivalent number of this
-  // token withdrawn to their address in this chain by the relayer.
-  function recreateERC20Token(address oldToken, uint oldChainId, uint256 initialAmount, string tokenName, uint8 decimalUnits, string tokenSymbol)
-  isOwner public {
-    HumanStandardToken newToken = new HumanStandardToken(initialAmount, tokenName, decimalUnits, tokenSymbol);
-    tokens[oldChainId][oldToken] = newToken;
   }
 
   // This is for more complicated tokens with additional functionality. They must
@@ -220,7 +212,7 @@ contract TrustedRelay {
     assert(m == keccak256(uint256(chainIds[0]), uint256(chainIds[1]), address(addrs[0]),
       uint256(amount), address(addrs[1]), uint256(data[0]), uint256(data[1])));
 
-    assert(chainIds[0] == chainId);
+    assert(chainIds[0] == chainId || chainIds[1] == chainId);
     address sender = ecrecover(m, v, r, s);
     assert(address(addrs[1]) == address(sender));
     return sender;

@@ -27,6 +27,10 @@ let parentToken = null;
 let childRelay = null;
 let childToken = null;
 
+let d;
+let sig;
+let hash;
+
 // const ethQuery = new EthQuery(new HttpProvider('http://localhost:7545'));
 let wallets = [];
 
@@ -50,11 +54,11 @@ contract('TrustedRelay', (accounts) => {
   function sign(msg, wallet) {
     const msgBuf = Buffer.from(msg.slice(2), 'hex');
     const pkey = Buffer.from(wallet[1].slice(2), 'hex');
-    const sig = util.ecsign(msgBuf, pkey);
+    const sigTmp = util.ecsign(msgBuf, pkey);
     const newSig = {
-      r: `0x${leftPad(sig.r.toString('hex'), 64, '0')}`,
-      s: `0x${leftPad(sig.s.toString('hex'), 64, '0')}`,
-      v: sig.v,
+      r: `0x${leftPad(sigTmp.r.toString('hex'), 64, '0')}`,
+      s: `0x${leftPad(sigTmp.s.toString('hex'), 64, '0')}`,
+      v: sigTmp.v,
     };
     return newSig;
   }
@@ -68,11 +72,11 @@ contract('TrustedRelay', (accounts) => {
     const a = leftPad(data.origChain.toString(16), 64, '0');
     const b = leftPad(data.destChain.toString(16), 64, '0');
     const c = data.token.slice(2);
-    const d = leftPad(data.amount.toString(16), 64, '0');
-    const e = data.sender.slice(2);
-    const f = leftPad(data.fee.toString(16), 64, '0');
-    const g = leftPad(data.ts.toString(16), 64, '0');
-    return sha3(`0x${a}${b}${c}${d}${e}${f}${g}`);
+    const e = leftPad(data.amount.toString(16), 64, '0');
+    const f = data.sender.slice(2);
+    const g = leftPad(data.fee.toString(16), 64, '0');
+    const h = leftPad(data.ts.toString(16), 64, '0');
+    return sha3(`0x${a}${b}${c}${e}${f}${g}${h}`);
   }
 
 
@@ -107,7 +111,7 @@ contract('TrustedRelay', (accounts) => {
     });
 
     it('should deposit 100 tokens to the relay.', async () => {
-      const d = {
+      d = {
         origChain: 1,
         destChain: 2,
         token: parentToken.address,
@@ -118,8 +122,8 @@ contract('TrustedRelay', (accounts) => {
       };
       const now = await parentRelay.getNow();
       d.ts = parseInt(now.toString(), 10);
-      const hash = hashData(d);
-      const sig = sign(hash, wallets[1]);
+      hash = hashData(d);
+      sig = sign(hash, wallets[1]);
       await parentRelay.depositERC20(hash, sig.v, sig.r, sig.s, d.token, d.amount,
         d.destChain, [d.fee, d.ts], { from: accounts[1] });
       const relayBal = await parentToken.balanceOf(parentRelay.address);
@@ -158,6 +162,19 @@ contract('TrustedRelay', (accounts) => {
       });
     });
 
+    it('should map the token', async () => {
+      await childRelay.methods.mapERC20Token(d.origChain, d.token,
+        childToken.options.address).send({ from: accounts[0] });
+      const mapping = await childRelay.methods.getTokenMapping(d.origChain, d.token)
+        .call();
+    });
+
+    it('should set the chainId', async () => {
+      await childRelay.methods.setChainId(2).send({ from: accounts[0] });
+      const chainId = await childRelay.methods.chainId().call();
+      assert(chainId === '2');
+    });
+
     it('should move all tokens to the relay contract', async () => {
       const supply = await childToken.methods.totalSupply().call();
       await childToken.methods.transfer(childRelay.options.address, supply).send({
@@ -167,27 +184,15 @@ contract('TrustedRelay', (accounts) => {
       assert(supply === balance);
     });
 
-    // it('should map the token to the one on the origin chain', async () => {
-    //   // mapERC20Token(uint oldChainId, address oldToken, address newToken)
-    //   const receipt = await childRelay.methods.mapERC20Token(1, parentToken.address,
-    //     childToken.options.address).send({ from: accounts[0] });
-    //   console.log('receipt', receipt);
-    //   const mapping = await childRelay.methods.getTokenMapping(1, parentToken.address).call();
-    //   assert(mapping === childToken.address);
-    // });
+    it('should relay the message', async () => {
+      // const isOwner = await childRelay.methods.checkIsOwner(accounts[0]).call();
+      await childRelay.methods.relayDepositERC20(hash, sig.v, sig.r, sig.s,
+        [d.token, d.sender], d.amount, d.origChain,
+        [d.fee, d.ts]).send({ from: accounts[0], gas: 300000 });
+      const balance = await childToken.methods.balanceOf(childRelay.options.address).call();
+      assert(balance === '900');
+      const userBal = await childToken.methods.balanceOf(d.sender).call();
+      assert(userBal === '100');
+    });
   });
-
-  // describe('Child relay', async () => {
-  //   it('should create a relay on a second chain.', async () => {
-  //     const relay = contract(relayABI, relayBytes, { from: accounts[0] });
-  //     childRelay = relay.new((err, res) => {
-  //       assert(err == null, `Error deploying child relay: ${err}`);
-  //       assert(res != null);
-  //     });
-  //     // childRelay = await TrustedRelay.new({ from: accounts[0] });
-  //     // tokenChild = await Token.new(1000, 'Token', 0, 'TKN', { from: accounts[1] });
-  //   });
-  // it('should relay the deposit to the second chain.', async() => { });
-  // it('should verify that the deposit was relayed.', async() => { });
-  // });
 });
