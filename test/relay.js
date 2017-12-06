@@ -26,6 +26,7 @@ let parentRelay = null;
 let parentToken = null;
 let childRelay = null;
 let childToken = null;
+let etherToken = null;
 
 let d;
 let sig;
@@ -79,10 +80,10 @@ contract('TrustedRelay', (accounts) => {
     return sha3(`0x${a}${b}${c}${e}${f}${g}${h}`);
   }
 
+  function isEVMException(err) {
+    return err.toString().includes('VM Exception');
+  }
 
-  // function isEVMException(err) {
-  //   return err.toString().includes('VM Exception');
-  // }
   describe('Origin chain', () => {
     it('should make sure the owner is accounts[0].', async () => {
       parentRelay = await TrustedRelay.deployed();
@@ -167,6 +168,7 @@ contract('TrustedRelay', (accounts) => {
         childToken.options.address).send({ from: accounts[0] });
       const mapping = await childRelay.methods.getTokenMapping(d.origChain, d.token)
         .call();
+      assert(mapping != null);
     });
 
     it('should set the chainId', async () => {
@@ -185,14 +187,133 @@ contract('TrustedRelay', (accounts) => {
     });
 
     it('should relay the message', async () => {
-      // const isOwner = await childRelay.methods.checkIsOwner(accounts[0]).call();
-      await childRelay.methods.relayDepositERC20(hash, sig.v, sig.r, sig.s,
+      await childRelay.methods.relayDeposit(hash, sig.v, sig.r, sig.s,
         [d.token, d.sender], d.amount, d.origChain,
         [d.fee, d.ts]).send({ from: accounts[0], gas: 300000 });
       const balance = await childToken.methods.balanceOf(childRelay.options.address).call();
       assert(balance === '900');
       const userBal = await childToken.methods.balanceOf(d.sender).call();
       assert(userBal === '100');
+    });
+
+    it('should fail to relay the message a second time', async () => {
+      try {
+        await childRelay.methods.relayDeposit(hash, sig.v, sig.r, sig.s,
+          [d.token, d.sender], d.amount, d.origChain,
+          [d.fee, d.ts]).send({ from: accounts[0], gas: 300000 });
+      } catch (err) {
+        assert(isEVMException(err) === true);
+      }
+    });
+  });
+
+  describe('Ether tokens', async () => {
+    // 100,000 tokens
+    const tokens = '1000000000';
+    const transfer = String(parseInt(tokens, 10) * 0.01);
+    const multiplier = String(10 ** 8);
+    let deposit = {};
+    let startingBal;
+
+    it('should get the starting user balance on the destination chain', async () => {
+      const startingBalTmp = await web3.eth.getBalance(accounts[1]);
+      startingBal = parseInt(startingBalTmp, 10);
+    });
+
+    it('should create an ether token on the main chain.', async () => {
+      etherToken = await Token.new(tokens, 'EtherToken', 10, 'ETKN', { from: accounts[0] });
+      const userBal = await etherToken.balanceOf(accounts[0]);
+      assert(userBal.toString() === tokens);
+    });
+
+    it('should fail to move an equal amount of ether to the destination Gateway', async () => {
+      try {
+        await web3.eth.sendTransaction({
+          from: accounts[0],
+          to: childRelay.options.address,
+          value: tokens,
+        });
+      } catch (err) {
+        assert(isEVMException(err) === true);
+      }
+    });
+
+    it('should allow ether deposits on the origin Gateway', async () => {
+      await childRelay.methods.changeEtherAllowed(true).send({ from: accounts[0] });
+      const allowed = await childRelay.methods.etherAllowed().call();
+      assert(allowed === true);
+    });
+
+    it('should map etherToken to ether in destination Gateway', async () => {
+      await childRelay.methods.mapEthToken(1, etherToken.address)
+        .send({ from: accounts[0] });
+      const mapping = await childRelay.methods.getEthTokenMapping(1).call();
+      assert(mapping.toLowerCase() === etherToken.address.toLowerCase());
+    });
+
+    it('should set the multiplier', async () => {
+      // Token has 10 decimals - need to multiply all tokens by 10**8 to get
+      // the amount of wei.
+      await childRelay.methods.setEthMultiplier(1, 10 ** 8).send({ from: accounts[0] });
+      const mult = await childRelay.methods.getEthMultiplier(1).call();
+      assert(mult === multiplier);
+    });
+
+    it('should move an equal amount of ether to the destination Gateway', async () => {
+      await web3.eth.sendTransaction({
+        from: accounts[0],
+        to: childRelay.options.address,
+        value: String(parseInt(tokens, 10) * multiplier),
+      });
+      const balance = await web3.eth.getBalance(childRelay.options.address);
+      assert(balance.toString() === String(tokens * multiplier));
+    });
+
+    it('should move 0.01 etherToken to accounts[1]', async () => {
+      await etherToken.transfer(accounts[1], transfer, { from: accounts[0] });
+      const balance = await etherToken.balanceOf(accounts[1]);
+      assert(balance.toString() === transfer);
+    });
+
+    it('should allow the relay to move 1 etherToken', async () => {
+      await etherToken.approve(parentRelay.address, transfer, { from: accounts[1] });
+      const approval = await etherToken.allowance(accounts[1], parentRelay.address);
+      assert(approval.toString() === transfer);
+    });
+
+    it('should deposit the etherToken to the origin Gateway', async () => {
+      const userBal1 = await etherToken.balanceOf(accounts[1]);
+      assert(userBal1.toString() === transfer);
+      const now = await parentRelay.getNow();
+      deposit = {
+        origChain: 1,
+        destChain: 2,
+        token: etherToken.address,
+        amount: parseInt(transfer, 10),
+        sender: accounts[1],
+        fee: 0,
+        ts: parseInt(now.toString(), 10),
+      };
+      hash = hashData(deposit);
+      sig = sign(hash, wallets[1]);
+      await parentRelay.depositERC20(hash, sig.v, sig.r, sig.s, deposit.token,
+        deposit.amount, deposit.destChain, [deposit.fee, deposit.ts],
+        { from: accounts[1] });
+      const relayBal = await etherToken.balanceOf(parentRelay.address);
+      assert.equal(relayBal.toString(), String(deposit.amount));
+    });
+
+    it('should relay the message to the destination chain', async () => {
+      await childRelay.methods.relayDeposit(hash, sig.v, sig.r, sig.s,
+        [deposit.token, deposit.sender], deposit.amount, deposit.origChain,
+        [deposit.fee, deposit.ts]).send({ from: accounts[0], gas: 300000 });
+      const relayBalance = await web3.eth.getBalance(childRelay.options.address);
+      const userBalance = await web3.eth.getBalance(deposit.sender);
+      const expectedRelayBal = multiplier * (parseInt(tokens, 10) - deposit.amount);
+      const expectedUserBal = multiplier * deposit.amount;
+      const userBalDiff = parseInt(userBalance, 10) - startingBal;
+      assert(relayBalance === String(expectedRelayBal));
+      assert(String(userBalDiff) === String(expectedUserBal));
     });
   });
 });
