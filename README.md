@@ -1,4 +1,4 @@
-# TrustedRelay EPM Package
+# TrustedRelay
 
 This is a contract to relay ERC20 and ERC721 tokens between chains. This requires a trusted relayer to create (or unlock) tokens on the desired chain.
 
@@ -61,6 +61,8 @@ npm run test
 ```
 
 ## Usage
+
+*NOTE: This is meant to be an [EPM](http://ethpm.com) package, but there is currently a [bug](https://github.com/trufflesuite/truffle/issues/699) in publishing packages with dependencies - I am waiting on resolution.*
 
 To use this package in your truffle project, install with:
 
