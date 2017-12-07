@@ -315,5 +315,70 @@ contract('TrustedRelay', (accounts) => {
       assert(relayBalance === String(expectedRelayBal));
       assert(String(userBalDiff) === String(expectedUserBal));
     });
+
+    const zeroAddr = '0x0000000000000000000000000000000000000000';
+    let deposit2 = {};
+    let toSend;
+
+    it('should deposit 0.005 ether to the destination relay', async () => {
+      toSend = deposit.amount * parseInt(multiplier, 10);
+      const now = await childRelay.methods.getNow().call();
+      const userBal = await web3.eth.getBalance(accounts[1]);
+      const startingUserBal = parseInt(userBal, 10);
+      const relayBal = await web3.eth.getBalance(childRelay.options.address);
+      const startingRelayBal = parseInt(relayBal, 10);
+      assert(startingUserBal >= deposit.amount);
+
+      // The amount is included in the hashed message, but the amount sent
+      // in msg.value is this amount times the multiplier. This is a hack for
+      // when the token has fewer than 18 decimals.
+      deposit2 = {
+        origChain: 2,
+        destChain: 1,
+        token: zeroAddr,
+        amount: deposit.amount,
+        sender: accounts[1],
+        fee: 0,
+        ts: 1 + parseInt(now.toString(), 10),
+      };
+      hash = hashData(deposit2);
+      sig = sign(hash, wallets[1]);
+      await childRelay.methods.depositEther(hash, sig.v, sig.r, sig.s, deposit2.destChain,
+        [deposit2.fee, deposit2.ts]).send({ from: accounts[1], value: toSend });
+
+      const newRelayBal = await web3.eth.getBalance(childRelay.options.address);
+      assert(String(startingRelayBal + toSend) === String(newRelayBal));
+    });
+
+    it('should map the destination ether to an origin token', async () => {
+      await parentRelay.mapERC20Token(2, zeroAddr, etherToken.address, {
+        from: accounts[0],
+      });
+      const mapping = await parentRelay.getTokenMapping(2, zeroAddr);
+      assert(mapping === etherToken.address);
+    });
+
+    it('should relay the message to the destination chain', async () => {
+      const userBalBeforeTmp = await etherToken.balanceOf(deposit.sender);
+      const userBalBefore = userBalBeforeTmp.toString();
+      const relayBalBeforeTmp = await etherToken.balanceOf(parentRelay.address);
+      const relayBalBefore = relayBalBeforeTmp.toString();
+
+      await parentRelay.relayDeposit(hash, sig.v, sig.r, sig.s,
+        [deposit2.token, deposit2.sender], deposit2.amount, deposit2.origChain,
+        [deposit2.fee, deposit2.ts], { from: accounts[0], gas: 300000 });
+
+      const userBalAfterTmp = await etherToken.balanceOf(deposit.sender);
+      const userBalAfter = userBalAfterTmp.toString();
+
+      assert(parseInt(userBalAfter, 10) ===
+        parseInt(userBalBefore, 10) + parseInt(deposit2.amount, 10));
+    });
   });
+
+  // describe('Revert relays', async () => {
+  //   it('should move ether to the destination Gateway', async () => {
+  //
+  //   })
+  // });
 });
