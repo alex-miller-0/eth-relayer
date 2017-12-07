@@ -361,8 +361,8 @@ contract('TrustedRelay', (accounts) => {
     it('should relay the message to the destination chain', async () => {
       const userBalBeforeTmp = await etherToken.balanceOf(deposit.sender);
       const userBalBefore = userBalBeforeTmp.toString();
-      const relayBalBeforeTmp = await etherToken.balanceOf(parentRelay.address);
-      const relayBalBefore = relayBalBeforeTmp.toString();
+      // const relayBalBeforeTmp = await etherToken.balanceOf(parentRelay.address);
+      // const relayBalBefore = relayBalBeforeTmp.toString();
 
       await parentRelay.relayDeposit(hash, sig.v, sig.r, sig.s,
         [deposit2.token, deposit2.sender], deposit2.amount, deposit2.origChain,
@@ -376,9 +376,89 @@ contract('TrustedRelay', (accounts) => {
     });
   });
 
-  // describe('Revert relays', async () => {
-  //   it('should move ether to the destination Gateway', async () => {
-  //
-  //   })
-  // });
+  // I will be sneaky here and test two things:
+  // 1) Test that destination->origin works for ERC20<->ERC20
+  // 2) Test that the mechanism to undoDeposit works
+  describe('Revert relays', async () => {
+    let dep = {};
+    let startingRelayBal;
+
+    it('should give childToken allowance to destination Gateway', async () => {
+      childToken.methods.approve(childRelay.options.address, 1).send({ from: accounts[1] });
+      const startingRelayBalTmp = await childToken.methods
+        .balanceOf(childRelay.options.address).call();
+      startingRelayBal = parseInt(startingRelayBalTmp.toString(), 10);
+    });
+
+    it('should deposit childToken to destination Gateway', async () => {
+      const tmp = await childToken.methods.balanceOf(accounts[1]).call();
+      const starting = parseInt(tmp, 10);
+      assert(starting >= 1);
+
+      const now = await parentRelay.getNow();
+      dep = {
+        origChain: 2,
+        destChain: 1,
+        token: childToken.options.address,
+        amount: 1,
+        sender: accounts[1],
+        fee: 0,
+        ts: 1 + parseInt(now.toString(), 10),
+      };
+      hash = hashData(dep);
+      sig = sign(hash, wallets[1]);
+      await childRelay.methods.depositERC20(hash, sig.v, sig.r, sig.s, dep.token,
+        dep.amount, dep.destChain, [dep.fee, dep.ts]).send({ from: accounts[1] });
+      const relayBal = await childToken.methods.balanceOf(childRelay.options.address).call();
+      assert.equal(parseInt(relayBal.toString(), 10) - startingRelayBal, 1);
+    });
+
+    it('should map the childToken', async () => {
+      await parentRelay.mapERC20Token(dep.origChain, dep.token, parentToken.address, {
+        from: accounts[0],
+      });
+      const mapping = await parentRelay.getTokenMapping(dep.origChain, dep.token);
+      assert(mapping === parentToken.address);
+    });
+
+    it('should relay the message to the origin Gateway', async () => {
+      const userBalBeforeTmp = await parentToken.balanceOf(dep.sender);
+      const userBalBefore = parseInt(userBalBeforeTmp.toString(), 10);
+      const relayBalBeforeTmp = await parentToken.balanceOf(parentRelay.address);
+      const relayBalBefore = parseInt(relayBalBeforeTmp.toString(), 10);
+
+      await parentRelay.relayDeposit(hash, sig.v, sig.r, sig.s,
+        [dep.token, dep.sender], dep.amount, dep.origChain,
+        [dep.fee, dep.ts], { from: accounts[0], gas: 300000 });
+
+      const userBalAfterTmp = await parentToken.balanceOf(dep.sender);
+      const userBalAfter = parseInt(userBalAfterTmp.toString(), 10);
+      const relayBalAfterTmp = await parentToken.balanceOf(parentRelay.address);
+      const relayBalAfter = parseInt(relayBalAfterTmp.toString(), 10);
+
+      assert(userBalAfter - userBalBefore === dep.amount);
+      assert(relayBalBefore - relayBalAfter === dep.amount);
+    });
+
+    it('should cancel the deposit', async () => {
+      const userBeforeTmp = await childToken.methods.balanceOf(dep.sender).call();
+      const userBefore = parseInt(userBeforeTmp.toString(), 10);
+      const relayBeforeTmp = await childToken.methods.balanceOf(childRelay.options.address)
+        .call();
+      const relayBefore = parseInt(relayBeforeTmp.toString(), 10);
+
+      await childRelay.methods.undoDeposit([hash, sig.r, sig.s], sig.v,
+        [dep.token, dep.sender], dep.amount, dep.destChain, [dep.fee, dep.ts])
+        .send({ from: accounts[0] });
+
+      const userAfterTmp = await childToken.methods.balanceOf(dep.sender).call();
+      const userAfter = parseInt(userAfterTmp.toString(), 10);
+      const relayAfterTmp = await childToken.methods.balanceOf(childRelay.options.address)
+        .call();
+      const relayAfter = parseInt(relayAfterTmp.toString(), 10);
+
+      assert(userAfter - userBefore === dep.amount);
+      assert(relayBefore - relayAfter === dep.amount);
+    });
+  });
 });

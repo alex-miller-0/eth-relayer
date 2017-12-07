@@ -110,10 +110,10 @@ contract TrustedRelay {
     assert(etherAllowed == true);
     assert(msg.value > 0);
     // Make sure there is an ether token on the desired chain
-    /*assert(ethTokens[toChain] != address(0));
-    uint amount = msg.value / ethMultipliers[toChain];*/
-    /*address sender = hashChecks(m, v, r, s, [address(0), msg.sender], amount, [chainId, toChain], data);*/
-    /*Deposit(sender, address(0), toChain, msg.value, data[0], data[1], now);*/
+    assert(ethTokens[toChain] != address(0));
+    uint amount = msg.value / ethMultipliers[toChain];
+    address sender = hashChecks(m, v, r, s, [address(0), msg.sender], amount, [chainId, toChain], data);
+    Deposit(sender, address(0), toChain, msg.value, data[0], data[1], now);
     played[m] = true;
   }
 
@@ -153,7 +153,7 @@ contract TrustedRelay {
   isOwner public {
     assert(played[sig[0]] == true);
     assert(undone[sig[0]] == false);
-    address sender = makeChecks(sig[0], v, sig[1], sig[2], addrs, amount, [chainId, toChain], data);
+    address sender = hashChecks(sig[0], v, sig[1], sig[2], addrs, amount, [chainId, toChain], data);
     if (addrs[0] == address(0)) {
       sender.transfer(amount);
     } else {
@@ -218,18 +218,6 @@ contract TrustedRelay {
   // CONSTANT FUNCTIONS
   //============================================================================
 
-  // addrs = [ token(originating), user ]
-  // chainIds = [ originating, destination ]
-  // data = [ fee, timestamp ]
-  function makeChecks(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, uint[2] chainIds, uint[2] data)
-  public constant returns(address) {
-    address sender = hashChecks(m, v, r, s, addrs, amount, chainIds, data);
-    address mappedToken = tokens[chainIds[0]][addrs[1]];
-    assert(mappedToken != address(0));
-    return sender;
-  }
-
-//    address sender = makeChecks(m, v, r, s, [token, msg.sender], amount, [chainId, toChain], data);
   function hashChecks(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, uint[2] chainIds, uint[2] data)
   public constant returns(address) {
     // Order of items:
