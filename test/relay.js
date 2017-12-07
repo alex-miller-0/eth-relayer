@@ -70,8 +70,8 @@ contract('TrustedRelay', (accounts) => {
   function hashData(data) {
     // NOTE: Solidity tightly packs addresses as 20-byte strings. Everything else
     // is packed as a 32 byte string. This is a weird idiosyncracy.
-    const a = leftPad(data.origChain.toString(16), 64, '0');
-    const b = leftPad(data.destChain.toString(16), 64, '0');
+    const a = data.origChain.slice(2);
+    const b = data.destChain.slice(2);
     const c = data.token.slice(2);
     const e = leftPad(data.amount.toString(16), 64, '0');
     const f = data.sender.slice(2);
@@ -91,12 +91,6 @@ contract('TrustedRelay', (accounts) => {
       assert(isOwner === true);
     });
 
-    it('should set chainId to 1.', async () => {
-      await parentRelay.setChainId(1, { from: accounts[0] });
-      const chainId = await parentRelay.chainId();
-      assert(chainId.toString() === '1');
-    });
-
     it('should create a new token on the main chain and set approval.', async () => {
       parentToken = await Token.new(1000, 'Token', 0, 'TKN', { from: accounts[1] });
       const userBal = await parentToken.balanceOf(accounts[1]);
@@ -104,31 +98,12 @@ contract('TrustedRelay', (accounts) => {
       await parentToken.approve(parentRelay.address, 100, { from: accounts[1] });
       const approval = await parentToken.allowance(accounts[1], parentRelay.address);
       assert(approval.toString() === '100');
+      console.log('Parent Token (origin)', parentToken.address);
     });
 
     it('should generate two wallets for accounts[0] and accounts[1].', async () => {
       wallets = generateFirstWallets(2, [], 0);
       assert(wallets.length === 2);
-    });
-
-    it('should deposit 100 tokens to the relay.', async () => {
-      d = {
-        origChain: 1,
-        destChain: 2,
-        token: parentToken.address,
-        amount: 100,
-        sender: accounts[1],
-        fee: 0,
-        ts: null,
-      };
-      const now = await parentRelay.getNow();
-      d.ts = parseInt(now.toString(), 10);
-      hash = hashData(d);
-      sig = sign(hash, wallets[1]);
-      await parentRelay.depositERC20(hash, sig.v, sig.r, sig.s, d.token, d.amount,
-        d.destChain, [d.fee, d.ts], { from: accounts[1] });
-      const relayBal = await parentToken.balanceOf(parentRelay.address);
-      assert.equal(relayBal.toString(), '100');
     });
   });
 
@@ -160,6 +135,17 @@ contract('TrustedRelay', (accounts) => {
       }).then((newInst) => {
         childToken = newInst;
         assert(childToken.options.address != null);
+        console.log('Child Token (origin)', childToken.options.address);
+
+        d = {
+          origChain: parentRelay.address.toLowerCase(),
+          destChain: childRelay.options.address.toLowerCase(),
+          token: parentToken.address.toLowerCase(),
+          amount: 100,
+          sender: accounts[1].toLowerCase(),
+          fee: 0,
+          ts: null,
+        };
       });
     });
 
@@ -171,12 +157,6 @@ contract('TrustedRelay', (accounts) => {
       assert(mapping != null);
     });
 
-    it('should set the chainId', async () => {
-      await childRelay.methods.setChainId(2).send({ from: accounts[0] });
-      const chainId = await childRelay.methods.chainId().call();
-      assert(chainId === '2');
-    });
-
     it('should move all tokens to the relay contract', async () => {
       const supply = await childToken.methods.totalSupply().call();
       await childToken.methods.transfer(childRelay.options.address, supply).send({
@@ -184,6 +164,17 @@ contract('TrustedRelay', (accounts) => {
       });
       const balance = await childToken.methods.balanceOf(childRelay.options.address).call();
       assert(supply === balance);
+    });
+
+    it('should deposit 100 tokens to the relay.', async () => {
+      const now = await parentRelay.getNow();
+      d.ts = parseInt(now.toString(), 10);
+      hash = hashData(d);
+      sig = sign(hash, wallets[1]);
+      await parentRelay.depositERC20(hash, sig.v, sig.r, sig.s, d.token, d.amount,
+        d.destChain, [d.fee, d.ts], { from: accounts[1] });
+      const relayBal = await parentToken.balanceOf(parentRelay.address);
+      assert.equal(relayBal.toString(), '100');
     });
 
     it('should relay the message', async () => {
@@ -245,17 +236,20 @@ contract('TrustedRelay', (accounts) => {
     });
 
     it('should map etherToken to ether in destination Gateway', async () => {
-      await childRelay.methods.mapEthToken(1, etherToken.address)
+      await childRelay.methods.mapEthToken(parentRelay.address, etherToken.address)
         .send({ from: accounts[0] });
-      const mapping = await childRelay.methods.getEthTokenMapping(1).call();
+      const mapping = await childRelay.methods.getEthTokenMapping(parentRelay.address)
+        .call();
       assert(mapping.toLowerCase() === etherToken.address.toLowerCase());
     });
 
     it('should set the multiplier', async () => {
       // Token has 10 decimals - need to multiply all tokens by 10**8 to get
       // the amount of wei.
-      await childRelay.methods.setEthMultiplier(1, 10 ** 8).send({ from: accounts[0] });
-      const mult = await childRelay.methods.getEthMultiplier(1).call();
+      await childRelay.methods.setEthMultiplier(parentRelay.address, 10 ** 8)
+        .send({ from: accounts[0] });
+      const mult = await childRelay.methods.getEthMultiplier(parentRelay.address)
+        .call();
       assert(mult === multiplier);
     });
 
@@ -286,13 +280,13 @@ contract('TrustedRelay', (accounts) => {
       assert(userBal1.toString() === transfer);
       const now = await parentRelay.getNow();
       deposit = {
-        origChain: 1,
-        destChain: 2,
-        token: etherToken.address,
+        origChain: parentRelay.address.toLowerCase(),
+        destChain: childRelay.options.address.toLowerCase(),
+        token: etherToken.address.toLowerCase(),
         amount: parseInt(transfer, 10),
-        sender: accounts[1],
+        sender: accounts[1].toLowerCase(),
         fee: 0,
-        ts: parseInt(now.toString(), 10),
+        ts: 1 + parseInt(now.toString(), 10),
       };
       hash = hashData(deposit);
       sig = sign(hash, wallets[1]);
@@ -333,11 +327,11 @@ contract('TrustedRelay', (accounts) => {
       // in msg.value is this amount times the multiplier. This is a hack for
       // when the token has fewer than 18 decimals.
       deposit2 = {
-        origChain: 2,
-        destChain: 1,
+        origChain: childRelay.options.address.toLowerCase(),
+        destChain: parentRelay.address.toLowerCase(),
         token: zeroAddr,
         amount: deposit.amount,
-        sender: accounts[1],
+        sender: accounts[1].toLowerCase(),
         fee: 0,
         ts: 1 + parseInt(now.toString(), 10),
       };
@@ -351,10 +345,9 @@ contract('TrustedRelay', (accounts) => {
     });
 
     it('should map the destination ether to an origin token', async () => {
-      await parentRelay.mapERC20Token(2, zeroAddr, etherToken.address, {
-        from: accounts[0],
-      });
-      const mapping = await parentRelay.getTokenMapping(2, zeroAddr);
+      await parentRelay.mapERC20Token(childRelay.options.address, zeroAddr,
+        etherToken.address, { from: accounts[0] });
+      const mapping = await parentRelay.getTokenMapping(childRelay.options.address, zeroAddr);
       assert(mapping === etherToken.address);
     });
 
@@ -363,7 +356,6 @@ contract('TrustedRelay', (accounts) => {
       const userBalBefore = userBalBeforeTmp.toString();
       // const relayBalBeforeTmp = await etherToken.balanceOf(parentRelay.address);
       // const relayBalBefore = relayBalBeforeTmp.toString();
-
       await parentRelay.relayDeposit(hash, sig.v, sig.r, sig.s,
         [deposit2.token, deposit2.sender], deposit2.amount, deposit2.origChain,
         [deposit2.fee, deposit2.ts], { from: accounts[0], gas: 300000 });
@@ -397,8 +389,8 @@ contract('TrustedRelay', (accounts) => {
 
       const now = await parentRelay.getNow();
       dep = {
-        origChain: 2,
-        destChain: 1,
+        origChain: childRelay.options.address,
+        destChain: parentRelay.address,
         token: childToken.options.address,
         amount: 1,
         sender: accounts[1],

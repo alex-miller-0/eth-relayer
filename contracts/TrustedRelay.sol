@@ -19,11 +19,6 @@ contract TrustedRelay {
   //============================================================================
 
   bool public killswitch;
-  // Fees mapping from chainId=>fee
-  // These are the minimum fees. chaindId=>token where token is the address on
-  // this chain (the originating chain).
-  mapping (uint => mapping(address => uint)) public fees;
-  uint public chainId;
   // Number of seconds worth of difference we will "tolerate" the default is
   // 10 minutes. If a message is sent that is >tolerance old, it will be rejected.
   uint public tolerance = 600;
@@ -31,15 +26,15 @@ contract TrustedRelay {
   mapping (address => mapping(address => uint)) balances;
   // Maps originating chain id and token address to new address. This requires
   // tokens be recreated on this chain before any such mappings can occur.
-  mapping (uint => mapping(address => address)) tokens;
+  mapping (address => mapping(address => address)) tokens;
   // An outside token that maps to ether given a chainId. A value of 0 indicates
   // there is no eth token on that chain.
-  mapping (uint => address) ethTokens;
+  mapping (address => address) ethTokens;
   // whether ether is allowed on this chain for deposits. This would be true
   // if this is a child chain that maps to an ERC20 token on another chain.
   bool public etherAllowed;
   // Multiplier that can resolve conflicts in decimals.
-  mapping (uint => uint) ethMultipliers;
+  mapping (address => uint) ethMultipliers;
   // If any deposits fail and need to be undone, that can only be done once.
   // They are identified by the hash that is signed to deposit in the first place.
   mapping (bytes32 => bool) undone;
@@ -50,12 +45,12 @@ contract TrustedRelay {
   // EVENTS AND INIT
   //============================================================================
 
-  event Deposit(address indexed sender, address indexed token, uint indexed toChain,
+  event Deposit(address indexed sender, address indexed token, address indexed toChain,
     uint amount, uint fee, uint tsIncl, uint tsNow);
-  event UndoDeposit(address indexed sender, address indexed token, uint indexed toChain,
+  event UndoDeposit(address indexed sender, address indexed token, address indexed toChain,
     uint amount, uint fee, uint tsIncl, uint tsNow);
   event RelayedDeposit(address indexed sender, address indexed oldToken, address newToken,
-    uint indexed fromChain, uint amount, uint fee, uint tsIncl, uint tsNow);
+    address indexed fromChain, uint amount, uint fee, uint tsIncl, uint tsNow);
 
   event NewOwner(address newOwner, uint timestamp);
   event RemoveOwner(address oldOwner, uint timestamp);
@@ -71,13 +66,6 @@ contract TrustedRelay {
     assert(etherAllowed == true);
   }
 
-  // This can only be done once!
-  function setChainId(uint id) public isOwner {
-    assert(chainId == 0);
-    chainId = id;
-  }
-
-
   //============================================================================
   // DEPOSITS AND RELAYS
   //============================================================================
@@ -85,11 +73,10 @@ contract TrustedRelay {
   // Make a deposit to another chain. This locks up the tokens on this chain.
   // They will appear in the other chain for withdrawal.
   // data = [ fee, timestamp ]
-  function depositERC20(bytes32 m, uint8 v, bytes32 r, bytes32 s, address token, uint amount, uint toChain, uint[2] data)
+  function depositERC20(bytes32 m, uint8 v, bytes32 r, bytes32 s, address token, uint amount, address toChain, uint[2] data)
   public payable noKill notPlayed(m) {
     assert(data[1] >= now && data[1] - now < tolerance); // check timestamp
-    assert(data[0] >= fees[toChain][token]);  // Make sure the fee is high enough
-    address sender = hashChecks(m, v, r, s, [token, msg.sender], amount, [chainId, toChain], data);
+    address sender = hashChecks(m, v, r, s, [token, msg.sender], amount, [address(this), toChain], data);
     Token t;
     t = Token(token);
     t.transferFrom(sender, address(this), amount);
@@ -103,16 +90,15 @@ contract TrustedRelay {
   // can map to the correct amount of ERC20 tokens on the other side.
   // chainIds = [ originating, destination]
   // data = [ fee, timestamp ]
-  function depositEther(bytes32 m, uint8 v, bytes32 r, bytes32 s, uint toChain, uint[2] data)
+  function depositEther(bytes32 m, uint8 v, bytes32 r, bytes32 s, address toChain, uint[2] data)
   public payable noKill notPlayed(m) {
     assert(data[1] >= now && data[1] - now < tolerance); // check timestamp
-    assert(data[0] >= fees[toChain][address(0)]);  // Make sure the fee is high enough
     assert(etherAllowed == true);
     assert(msg.value > 0);
     // Make sure there is an ether token on the desired chain
     assert(ethTokens[toChain] != address(0));
     uint amount = msg.value / ethMultipliers[toChain];
-    address sender = hashChecks(m, v, r, s, [address(0), msg.sender], amount, [chainId, toChain], data);
+    address sender = hashChecks(m, v, r, s, [address(0), msg.sender], amount, [address(this), toChain], data);
     Deposit(sender, address(0), toChain, msg.value, data[0], data[1], now);
     played[m] = true;
   }
@@ -121,9 +107,9 @@ contract TrustedRelay {
   // Unfreeze tokens on this chain.
   // addrs = [ token, originalSender ]
   // data = [ fee, timestamp ]
-  function relayDeposit(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, uint fromChain, uint[2] data)
+  function relayDeposit(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, address fromChain, uint[2] data)
   isOwner public notPlayed(m) {
-    address sender = hashChecks(m, v, r, s, addrs, amount, [fromChain, chainId], data);
+    address sender = hashChecks(m, v, r, s, addrs, amount, [fromChain, address(this)], data);
     assert(sender == addrs[1]);
     if (ethTokens[fromChain] == addrs[0] && address(addrs[0]) != address(0)) {
       // If this is an eth token, reward ether on this chain
@@ -131,7 +117,6 @@ contract TrustedRelay {
       msg.sender.transfer(ethMultipliers[fromChain] * data[0]);
       RelayedDeposit(sender, addrs[0], address(0), fromChain, amount, data[0], data[1], now);
     } else {
-      played[m] = false;
       require(tokens[fromChain][addrs[0]] != address(0));
       // Otherwise reward a token
       Token t;
@@ -149,11 +134,11 @@ contract TrustedRelay {
   // addrs = [ token, originalSender ]
   // sig = [ hash, r, s ]
   // data = [ fee, timestamp ]
-  function undoDeposit(bytes32[3] sig, uint8 v, address[2] addrs, uint amount, uint toChain, uint[2] data)
+  function undoDeposit(bytes32[3] sig, uint8 v, address[2] addrs, uint amount, address toChain, uint[2] data)
   isOwner public {
     assert(played[sig[0]] == true);
     assert(undone[sig[0]] == false);
-    address sender = hashChecks(sig[0], v, sig[1], sig[2], addrs, amount, [chainId, toChain], data);
+    address sender = hashChecks(sig[0], v, sig[1], sig[2], addrs, amount, [address(this), toChain], data);
     if (addrs[0] == address(0)) {
       sender.transfer(amount);
     } else {
@@ -188,25 +173,21 @@ contract TrustedRelay {
     tolerance = newTolerance;
   }
 
-  function setFee(uint chainId, address token, uint fee) public isOwner {
-    fees[chainId][token] = fee;
-  }
-
   function flipKillSwitch(bool kill) public isOwner {
     killswitch = kill;
   }
 
-  function mapERC20Token(uint oldChainId, address oldToken, address newToken) public isOwner {
+  function mapERC20Token(address oldChainId, address oldToken, address newToken) public isOwner {
     assert(tokens[oldChainId][oldToken] == address(0));
     tokens[oldChainId][oldToken] = newToken;
   }
 
-  function mapEthToken(uint fromChain, address originToken) public isOwner {
+  function mapEthToken(address fromChain, address originToken) public isOwner {
     assert(ethTokens[fromChain] == address(0));
     ethTokens[fromChain] = originToken;
   }
 
-  function setEthMultiplier(uint fromChain, uint multiplier) public isOwner {
+  function setEthMultiplier(address fromChain, uint multiplier) public isOwner {
     assert(ethTokens[fromChain] != address(0));
     assert(ethMultipliers[fromChain] == uint(0));
     ethMultipliers[fromChain] = multiplier;
@@ -218,19 +199,19 @@ contract TrustedRelay {
   // CONSTANT FUNCTIONS
   //============================================================================
 
-  function hashChecks(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, uint[2] chainIds, uint[2] data)
+  function hashChecks(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, address[2] chainIds, uint[2] data)
   public constant returns(address) {
     // Order of items:
     // <originating chainId>, <destination chainId>,
     // <originating token address>, <depositer address>
     // <amount of token deposited (atomic units)>,
     // <fee>, <timestamp>
-    assert(m == keccak256(uint256(chainIds[0]), uint256(chainIds[1]), address(addrs[0]),
+    assert(m == keccak256(address(chainIds[0]), address(chainIds[1]), address(addrs[0]),
       uint256(amount), address(addrs[1]), uint256(data[0]), uint256(data[1])));
 
-    assert(chainIds[0] == chainId || chainIds[1] == chainId);
+    assert(chainIds[0] == address(this) || chainIds[1] == address(this));
     address sender = ecrecover(m, v, r, s);
-    assert(address(addrs[1]) == address(sender));
+    assert(sender == addrs[1]);
     return sender;
   }
 
@@ -244,15 +225,15 @@ contract TrustedRelay {
     return now;
   }
 
-  function getTokenMapping(uint fromChain, address token) public constant returns (address) {
+  function getTokenMapping(address fromChain, address token) public constant returns (address) {
     return tokens[fromChain][token];
   }
 
-  function getEthTokenMapping(uint fromChain) public constant returns (address) {
+  function getEthTokenMapping(address fromChain) public constant returns (address) {
     return ethTokens[fromChain];
   }
 
-  function getEthMultiplier(uint fromChain) public constant returns (uint) {
+  function getEthMultiplier(address fromChain) public constant returns (uint) {
     return ethMultipliers[fromChain];
   }
 
