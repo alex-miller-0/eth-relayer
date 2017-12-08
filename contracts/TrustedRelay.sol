@@ -206,8 +206,8 @@ contract TrustedRelay {
     // <originating token address>, <depositer address>
     // <amount of token deposited (atomic units)>,
     // <fee>, <timestamp>
-    assert(m == keccak256(address(chainIds[0]), address(chainIds[1]), address(addrs[0]),
-      uint256(amount), address(addrs[1]), uint256(data[0]), uint256(data[1])));
+    bytes memory prefix = "\x19Ethereum Signed Message:\n176";
+    assert(m == keccak256(prefix, chainIds[0], chainIds[1], addrs[0], amount, addrs[1], data[0], data[1]));
 
     assert(chainIds[0] == address(this) || chainIds[1] == address(this));
     address sender = ecrecover(m, v, r, s);
@@ -215,6 +215,14 @@ contract TrustedRelay {
     return sender;
   }
 
+  function testHash(address destChain, address origChain, uint amount, address token, uint[2] data) public constant returns (bytes32) {
+    bytes memory prefix = "\x19Ethereum Signed Message:\n176";
+    /*bytes32 hash = keccak256(address(fromChain), address(address(this)), address(token),
+      uint256(amount), address(msg.sender), uint256(data[0]), uint256(data[1]));*/
+    /*bytes32 hash = keccak256(address(0x0168D15E66Bffe41BE82Bc103d0EcBf1753026ca));*/
+    /*assert(msg.sender == address(0x1bcf1dd5f2563ebb312bd8093a909830f77053cf));*/
+    return keccak256(prefix, origChain, destChain, token, amount, msg.sender, data[0], data[1]);
+  }
 
   function checkIsOwner(address owner) public constant returns (bool) {
     if (owners[owner] == true) { return true; }

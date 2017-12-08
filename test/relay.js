@@ -5,7 +5,7 @@ const bip39 = require('bip39');
 const hdkey = require('ethereumjs-wallet/hdkey');
 const leftPad = require('left-pad');
 const secrets = require('../secrets.json');
-const sha3 = require('solidity-sha3').default;
+// const sha3 = require('solidity-sha3').default;
 const util = require('ethereumjs-util');
 const truffleConf = require('../truffle.js').networks;
 const Web3 = require('web3');
@@ -77,7 +77,10 @@ contract('TrustedRelay', (accounts) => {
     const f = data.sender.slice(2);
     const g = leftPad(data.fee.toString(16), 64, '0');
     const h = leftPad(data.ts.toString(16), 64, '0');
-    return sha3(`0x${a}${b}${c}${e}${f}${g}${h}`);
+    const msg = `${a}${b}${c}${e}${f}${g}${h}`;
+    const personal = util.hashPersonalMessage(Buffer.from(msg, 'hex'));
+    console.log('personal', personal.toString('hex'));
+    return `0x${personal.toString('hex')}`;
   }
 
   function isEVMException(err) {
@@ -87,6 +90,7 @@ contract('TrustedRelay', (accounts) => {
   describe('Origin chain', () => {
     it('should make sure the owner is accounts[0].', async () => {
       parentRelay = await TrustedRelay.deployed();
+      console.log('Origin Gateway', parentRelay.address);
       const isOwner = await parentRelay.checkIsOwner(accounts[0]);
       assert(isOwner === true);
     });
@@ -122,6 +126,7 @@ contract('TrustedRelay', (accounts) => {
       assert(receipt.blockNumber >= 0);
       childRelay = await new web3.eth.Contract(relayABI, receipt.contractAddress);
       assert(receipt.contractAddress === childRelay.options.address);
+      console.log('Destination Gateway: ', childRelay.options.address);
     });
 
     it('should create a token on the destination chain', async () => {
@@ -168,9 +173,14 @@ contract('TrustedRelay', (accounts) => {
 
     it('should deposit 100 tokens to the relay.', async () => {
       const now = await parentRelay.getNow();
-      d.ts = parseInt(now.toString(), 10);
+      d.ts = parseInt(now.toString(), 10) + 1;
       hash = hashData(d);
       sig = sign(hash, wallets[1]);
+
+      const thash = await parentRelay.testHash(d.destChain, d.origChain, d.amount, d.token,
+        [d.fee, d.ts], { from: accounts[1] });
+      console.log('solidity hash', thash);
+
       await parentRelay.depositERC20(hash, sig.v, sig.r, sig.s, d.token, d.amount,
         d.destChain, [d.fee, d.ts], { from: accounts[1] });
       const relayBal = await parentToken.balanceOf(parentRelay.address);
