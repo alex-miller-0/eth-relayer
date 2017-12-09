@@ -60,6 +60,41 @@ You can now run the tests with:
 npm run test
 ```
 
+## (react app) Exporting config
+
+If you wish to test this with the [front-end react app](https://github.com/alex-miller-0/trusted-relay-app), you can setup a config file to load. Choose your test networks (you need two) and run the following:
+
+```
+npm run gen-config <origin port> <destination port>
+```
+
+If you don't want to use localhost ports, you can replace either port in the above command with the full URL of your network.
+
+This will generate a file in your repo's root called `networks.json`, which will look like this:
+
+```
+{
+  "networks": {
+    "5777": {
+      "name": "Origin",
+      "value": "",
+      "gateway": "http://localhost:7545"
+    },
+    "1512850781666": {
+      "name": "Destination",
+      "value": "",
+      "gateway": "http://localhost:7546"
+    }
+  }
+}
+```
+
+The `value`s correspond to a Gateway contract address, which serves as the chain identifier in the relay network. You can generate values for these automatically by running:
+
+```
+npm run test
+```
+
 ## Usage
 
 *NOTE: This is meant to be an [EPM](http://ethpm.com) package, but there is currently a [bug](https://github.com/trufflesuite/truffle/issues/699) in publishing packages with dependencies - I am waiting on resolution.*
