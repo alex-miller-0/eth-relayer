@@ -75,7 +75,7 @@ contract TrustedRelay {
   // data = [ fee, timestamp ]
   function depositERC20(bytes32 m, uint8 v, bytes32 r, bytes32 s, address token, uint amount, address toChain, uint[2] data)
   public payable noKill notPlayed(m) {
-    assert(data[1] >= now && data[1] - now < tolerance); // check timestamp
+    /*assert(data[1] >= now && data[1] - now < tolerance); // check timestamp*/
     address sender = hashChecks(m, v, r, s, [token, msg.sender], amount, [address(this), toChain], data);
     Token t;
     t = Token(token);
@@ -213,15 +213,6 @@ contract TrustedRelay {
     address sender = ecrecover(m, v, r, s);
     assert(sender == addrs[1]);
     return sender;
-  }
-
-  function testHash(address destChain, address origChain, uint amount, address token, uint[2] data) public constant returns (bytes32) {
-    bytes memory prefix = "\x19Ethereum Signed Message:\n176";
-    /*bytes32 hash = keccak256(address(fromChain), address(address(this)), address(token),
-      uint256(amount), address(msg.sender), uint256(data[0]), uint256(data[1]));*/
-    /*bytes32 hash = keccak256(address(0x0168D15E66Bffe41BE82Bc103d0EcBf1753026ca));*/
-    /*assert(msg.sender == address(0x1bcf1dd5f2563ebb312bd8093a909830f77053cf));*/
-    return keccak256(prefix, origChain, destChain, token, amount, msg.sender, data[0], data[1]);
   }
 
   function checkIsOwner(address owner) public constant returns (bool) {
