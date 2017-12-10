@@ -67,8 +67,9 @@ If you wish to test this with the [front-end react app](https://github.com/alex-
 ```
 npm run gen-config <origin port> <destination port>
 ```
-
 If you don't want to use localhost ports, you can replace either port in the above command with the full URL of your network.
+
+*NOTE: If you reboot TestRPC, you will need to regenerate this file with `npm run gen-config`. TestRPC assigns a random network_id value, so if you are connected to trusted-relay-app, that will break!*
 
 This will generate a file in your repo's root called `networks.json`, which will look like this:
 

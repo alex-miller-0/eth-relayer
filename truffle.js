@@ -15,7 +15,7 @@ module.exports = {
     devChild: {
       host: 'localhost',
       port: 7546,
-      network_id: "*",
+      network_id: '*',
     },
   },
 };

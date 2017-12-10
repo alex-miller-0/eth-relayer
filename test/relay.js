@@ -9,6 +9,7 @@ const secrets = require('../secrets.json');
 const util = require('ethereumjs-util');
 const truffleConf = require('../truffle.js').networks;
 const Web3 = require('web3');
+const jsonfile = require('jsonfile');
 
 const provider = `http://${truffleConf.devChild.host}:${truffleConf.devChild.port}`;
 const web3 = new Web3(new Web3.providers.HttpProvider(provider));
@@ -21,6 +22,9 @@ const tokenBytes = require('../build/contracts/HumanStandardToken.json').bytecod
 const Token = artifacts.require('HumanStandardToken.sol'); // EPM package
 const TrustedRelay = artifacts.require('./TrustedRelay');
 
+// For updating the networks file (for testing front end)
+let networks;
+const NETWORK_F = 'networks.json';
 
 let parentRelay = null;
 let parentToken = null;
@@ -79,7 +83,7 @@ contract('TrustedRelay', (accounts) => {
     const h = leftPad(data.ts.toString(16), 64, '0');
     const msg = `${a}${b}${c}${e}${f}${g}${h}`;
     const personal = util.hashPersonalMessage(Buffer.from(msg, 'hex'));
-    console.log('personal', personal.toString('hex'));
+    // console.log('personal', personal.toString('hex'));
     return `0x${personal.toString('hex')}`;
   }
 
@@ -87,10 +91,31 @@ contract('TrustedRelay', (accounts) => {
     return err.toString().includes('VM Exception');
   }
 
+  function addChainId(name, chainId) {
+    if (networks) {
+      Object.keys(networks.networks).forEach((key) => {
+        if (networks.networks[key].name === name) {
+          networks.networks[key].value = chainId;
+        }
+      });
+    }
+  }
+
+  describe('Setup', () => {
+    it('should check for networks file', async () => {
+      try {
+        networks = jsonfile.readFileSync(NETWORK_F);
+      } catch (e) {
+        networks = null;
+      }
+    });
+  });
+
   describe('Origin chain', () => {
     it('should make sure the owner is accounts[0].', async () => {
       parentRelay = await TrustedRelay.deployed();
-      console.log('Origin Gateway', parentRelay.address);
+      addChainId('Origin', parentRelay.address);
+      // console.log('Origin Gateway', parentRelay.address);
       const isOwner = await parentRelay.checkIsOwner(accounts[0]);
       assert(isOwner === true);
     });
@@ -102,7 +127,8 @@ contract('TrustedRelay', (accounts) => {
       await parentToken.approve(parentRelay.address, 100, { from: accounts[1] });
       const approval = await parentToken.allowance(accounts[1], parentRelay.address);
       assert(approval.toString() === '100');
-      console.log('Parent Token (origin)', parentToken.address);
+      // console.log('Parent Token (origin)', parentToken.address);
+      if (networks) { networks.tokens = { origin: parentToken.address }; }
     });
 
     it('should generate two wallets for accounts[0] and accounts[1].', async () => {
@@ -126,7 +152,7 @@ contract('TrustedRelay', (accounts) => {
       assert(receipt.blockNumber >= 0);
       childRelay = await new web3.eth.Contract(relayABI, receipt.contractAddress);
       assert(receipt.contractAddress === childRelay.options.address);
-      console.log('Destination Gateway: ', childRelay.options.address);
+      addChainId('Destination', childRelay.options.address);
     });
 
     it('should create a token on the destination chain', async () => {
@@ -140,7 +166,8 @@ contract('TrustedRelay', (accounts) => {
       }).then((newInst) => {
         childToken = newInst;
         assert(childToken.options.address != null);
-        console.log('Child Token (origin)', childToken.options.address);
+        // console.log('Child Token (origin)', childToken.options.address);
+        if (networks) { networks.tokens.destination = childToken.options.address; }
 
         d = {
           origChain: parentRelay.address.toLowerCase(),
@@ -177,9 +204,9 @@ contract('TrustedRelay', (accounts) => {
       hash = hashData(d);
       sig = sign(hash, wallets[1]);
 
-      const thash = await parentRelay.testHash(d.destChain, d.origChain, d.amount, d.token,
-        [d.fee, d.ts], { from: accounts[1] });
-      console.log('solidity hash', thash);
+      // const thash = await parentRelay.testHash(d.destChain, d.origChain, d.amount, d.token,
+      //   [d.fee, d.ts], { from: accounts[1] });
+      // console.log('solidity hash', thash);
 
       await parentRelay.depositERC20(hash, sig.v, sig.r, sig.s, d.token, d.amount,
         d.destChain, [d.fee, d.ts], { from: accounts[1] });
@@ -223,6 +250,7 @@ contract('TrustedRelay', (accounts) => {
 
     it('should create an ether token on the main chain.', async () => {
       etherToken = await Token.new(tokens, 'EtherToken', 10, 'ETKN', { from: accounts[0] });
+      if (networks) { networks.tokens.etherToken = etherToken.address; }
       const userBal = await etherToken.balanceOf(accounts[0]);
       assert(userBal.toString() === tokens);
     });
@@ -461,6 +489,14 @@ contract('TrustedRelay', (accounts) => {
 
       assert(userAfter - userBefore === dep.amount);
       assert(relayBefore - relayAfter === dep.amount);
+    });
+  });
+
+  describe('Cleanup', async () => {
+    it('should write the networks file', async () => {
+      jsonfile.writeFile(NETWORK_F, networks, { spaces: 2 }, (err) => {
+        if (err) console.log('Error writing networks.json', err);
+      });
     });
   });
 });
