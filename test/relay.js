@@ -477,9 +477,11 @@ contract('TrustedRelay', (accounts) => {
         .call();
       const relayBefore = parseInt(relayBeforeTmp.toString(), 10);
 
-      await childRelay.methods.undoDeposit([hash, sig.r, sig.s], sig.v,
-        [dep.token, dep.sender], dep.amount, dep.destChain, [dep.fee, dep.ts])
-        .send({ from: accounts[0] });
+      const relayerSig = sign(hash, wallets[0]);
+
+      await childRelay.methods.undoDeposit([hash, sig.r, sig.s, relayerSig.r,
+        relayerSig.s], [sig.v, relayerSig.v], [dep.token, dep.sender], dep.amount,
+      dep.destChain, [dep.fee, dep.ts]).send({ from: accounts[1] });
 
       const userAfterTmp = await childToken.methods.balanceOf(dep.sender).call();
       const userAfter = parseInt(userAfterTmp.toString(), 10);

@@ -47,9 +47,9 @@ contract TrustedRelay {
 
   event Deposit(address indexed sender, address indexed token, address indexed toChain,
     uint amount, uint fee, uint tsIncl, uint tsNow);
-  event UndoDeposit(address indexed sender, address indexed token, address indexed toChain,
-    uint amount, uint fee, uint tsIncl, uint tsNow);
-  event RelayedDeposit(address indexed sender, address indexed oldToken, address newToken,
+  event UndoDeposit(address indexed sender, address relayer, address indexed token,
+    address indexed toChain, uint amount, uint fee, uint tsIncl, uint tsNow);
+  event RelayedDeposit(address indexed sender, address oldToken, address indexed newToken,
     address indexed fromChain, uint amount, uint fee, uint tsIncl, uint tsNow);
 
   event NewOwner(address newOwner, uint timestamp);
@@ -77,6 +77,7 @@ contract TrustedRelay {
   public payable noKill notPlayed(m) {
     /*assert(data[1] >= now && data[1] - now < tolerance); // check timestamp*/
     address sender = hashChecks(m, v, r, s, [token, msg.sender], amount, [address(this), toChain], data);
+    assert(sender == msg.sender);
     Token t;
     t = Token(token);
     t.transferFrom(sender, address(this), amount);
@@ -99,6 +100,7 @@ contract TrustedRelay {
     assert(ethTokens[toChain] != address(0));
     uint amount = msg.value / ethMultipliers[toChain];
     address sender = hashChecks(m, v, r, s, [address(0), msg.sender], amount, [address(this), toChain], data);
+    assert(sender == msg.sender);
     Deposit(sender, address(0), toChain, msg.value, data[0], data[1], now);
     played[m] = true;
   }
@@ -130,15 +132,22 @@ contract TrustedRelay {
   }
 
   // If there is not a matching token on the other chain or some other error
-  // occurred, the relayer can bring it back to this chain.
+  // occurred, the deposit can be undone. This can also be done if the relayer
+  // doesn't want to pay the gas to relay the message onto the other chain.
+  //
+  // This function can be called by any actor on the network with the right data.
+  //
+  // sig = [ hash, sender_r, sender_s, relayer_r, relayer_s ]
+  // v = [ sender_v, relayer_v ]
   // addrs = [ token, originalSender ]
   // sig = [ hash, r, s ]
   // data = [ fee, timestamp ]
-  function undoDeposit(bytes32[3] sig, uint8 v, address[2] addrs, uint amount, address toChain, uint[2] data)
-  isOwner public {
+  function undoDeposit(bytes32[5] sig, uint8[2] v, address[2] addrs, uint amount, address toChain, uint[2] data) public {
     assert(played[sig[0]] == true);
     assert(undone[sig[0]] == false);
-    address sender = hashChecks(sig[0], v, sig[1], sig[2], addrs, amount, [address(this), toChain], data);
+    address sender = hashChecks(sig[0], v[0], sig[1], sig[2], addrs, amount, [address(this), toChain], data);
+    address relayer = hashChecks(sig[0], v[1], sig[3], sig[4], addrs, amount, [address(this), toChain], data);
+    assert(owners[relayer] == true);
     if (addrs[0] == address(0)) {
       sender.transfer(amount);
     } else {
@@ -146,7 +155,7 @@ contract TrustedRelay {
       t = Token(addrs[0]);
       t.transfer(sender, amount);
     }
-    UndoDeposit(sender, addrs[0], toChain, amount, data[0], data[1], now);
+    UndoDeposit(sender, relayer, addrs[0], toChain, amount, data[0], data[1], now);
     undone[sig[0]] = true;
   }
 
@@ -208,10 +217,8 @@ contract TrustedRelay {
     // <fee>, <timestamp>
     bytes memory prefix = "\x19Ethereum Signed Message:\n176";
     assert(m == keccak256(prefix, chainIds[0], chainIds[1], addrs[0], amount, addrs[1], data[0], data[1]));
-
     assert(chainIds[0] == address(this) || chainIds[1] == address(this));
     address sender = ecrecover(m, v, r, s);
-    assert(sender == addrs[1]);
     return sender;
   }
 
