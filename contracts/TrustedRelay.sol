@@ -47,10 +47,10 @@ contract TrustedRelay {
 
   event Deposit(address indexed sender, address indexed token, address indexed toChain,
     uint amount, uint fee, uint tsIncl, uint tsNow);
-  event UndoDeposit(address indexed sender, address relayer, address indexed token,
-    address indexed toChain, uint amount, uint fee, uint tsIncl, uint tsNow);
-  event RelayedDeposit(address indexed sender, address oldToken, address indexed newToken,
-    address indexed fromChain, uint amount, uint fee, uint tsIncl, uint tsNow);
+  event UndoDeposit(address indexed sender, address indexed token, address indexed toChain,
+    address relayer, uint amount, uint fee, uint tsIncl, uint tsNow);
+  event RelayedDeposit(address indexed sender, address indexed newToken,
+    address indexed fromChain, address oldToken, uint amount, uint fee, uint tsIncl, uint tsNow);
 
   event NewOwner(address newOwner, uint timestamp);
   event RemoveOwner(address oldOwner, uint timestamp);
@@ -117,7 +117,7 @@ contract TrustedRelay {
       // If this is an eth token, reward ether on this chain
       sender.transfer(ethMultipliers[fromChain] * (amount-data[0]));
       msg.sender.transfer(ethMultipliers[fromChain] * data[0]);
-      RelayedDeposit(sender, addrs[0], address(0), fromChain, amount, data[0], data[1], now);
+      RelayedDeposit(sender, address(0), fromChain, addrs[0], amount, data[0], data[1], now);
     } else {
       require(tokens[fromChain][addrs[0]] != address(0));
       // Otherwise reward a token
@@ -126,7 +126,7 @@ contract TrustedRelay {
       assert(t.balanceOf(address(this)) >= amount);
       t.transfer(sender, amount-data[0]);
       t.transfer(msg.sender, data[0]);
-      RelayedDeposit(sender, addrs[0], tokens[fromChain][addrs[0]], fromChain, amount, data[0], data[1], now);
+      RelayedDeposit(sender, tokens[fromChain][addrs[0]], fromChain, addrs[0], amount, data[0], data[1], now);
     }
     played[m] = true;
   }
@@ -155,7 +155,7 @@ contract TrustedRelay {
       t = Token(addrs[0]);
       t.transfer(sender, amount);
     }
-    UndoDeposit(sender, relayer, addrs[0], toChain, amount, data[0], data[1], now);
+    UndoDeposit(sender, addrs[0], toChain, relayer, amount, data[0], data[1], now);
     undone[sig[0]] = true;
   }
 

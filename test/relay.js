@@ -115,7 +115,7 @@ contract('TrustedRelay', (accounts) => {
     it('should make sure the owner is accounts[0].', async () => {
       parentRelay = await TrustedRelay.deployed();
       addChainId('Origin', parentRelay.address);
-      // console.log('Origin Gateway', parentRelay.address);
+      console.log('Origin Gateway', parentRelay.address);
       const isOwner = await parentRelay.checkIsOwner(accounts[0]);
       assert(isOwner === true);
     });
@@ -495,6 +495,13 @@ contract('TrustedRelay', (accounts) => {
   });
 
   describe('Cleanup', async () => {
+    // it('should get events', async () => {
+    //   await parentRelay.allEvents({ }, { fromBlock: 0, toBlock: 'latest' }, (err, events) => {
+    //     console.log('err', err);
+    //     console.log('events', events);
+    //   });
+    // });
+
     it('should write the networks file', async () => {
       jsonfile.writeFile(NETWORK_F, networks, { spaces: 2 }, (err) => {
         if (err) console.log('Error writing networks.json', err);
