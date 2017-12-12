@@ -6,11 +6,17 @@
   "directories": {
     "test": "test"
   },
+  "bin": {
+    "eth-relayer-daemon": "daemon/daemon",
+    "eth-relayer-manager": "daemon/manager"
+  },
   "scripts": {
     "test": "node test.js",
     "fix": "eslint --fix",
     "lint": "eslint",
-    "gen-config": "node scripts/genConfig.js"
+    "gen-config": "node scripts/genConfig.js",
+    "start": "daemon/manager",
+    "parity": "node scripts/parity.js"
   },
   "repository": {
     "type": "git",

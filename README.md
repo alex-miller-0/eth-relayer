@@ -44,7 +44,7 @@ Your `secrets.json` must contain a `mnemonic` and a `hdPath`:
 
 You can generate a new BIP39 mnemonic [here](https://coinomi.com/recovery-phrase-tool.html). Do not change `hdPath` unless you have a good reason to - changing it will brea the tests.
 
-## Testing
+## Running Tests
 
 In order to run the tests, you will need two local blockchains running. Assuming you already have Ganache running on port 7545, you can start a new testrpc instance on port 7546 with:
 
@@ -59,6 +59,18 @@ You can now run the tests with:
 ```
 npm run test
 ```
+
+## Testing Daemon with Parity PoA
+
+If you want to run the relayer daemon, you need to use Parity or Geth, as the daemon uses web3.js 1.0 event pub/sub and websocket listening is not allowed in TestRPC/Ganache. I have included a convenience script to boot one or more parity nodes locally given a series of ports. You can run it with:
+
+```
+npm run party <port1> <port2> ... <portN>
+```
+
+*NOTE: Ports must be 4+ integers apart!*
+
+This will fork N child processes as parity proof-of-authority networks using your seed phrase in `secrets.json`. The data is in `scripts/poa/<port>`.
 
 ## (react app) Exporting config
 

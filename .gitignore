@@ -1,3 +1,5 @@
+daemon.*
+scripts/poa
 networks.json
 node_modules
 secrets.json

@@ -1,0 +1,28 @@
+#!/usr/bin/env node
+
+// Starts a daemon process to listen to all relayed messages.
+const networks = require('../networks.json').networks;
+const spawn = require('child_process').spawn;
+const fs = require('fs');
+const access = fs.createWriteStream('./daemon.log', { flags: 'a' });
+const error = fs.createWriteStream('./daemon.error.log', { flags: 'a' });
+
+const hosts = [];
+Object.keys(networks).forEach((n) => { hosts.push([networks[n].gateway, networks[n].value]); })
+
+hosts.forEach((host) => {
+  listenSubProcess(host);
+})
+
+// Start a subprocess to listen on a host
+function listenSubProcess(host) {
+  const daemon = spawn(`./daemon/daemon`, [host[0], host[1]], { stdio: 'pipe' })
+  daemon.stdout.pipe(access);
+  daemon.stderr.pipe(error);
+  daemon.on('close', () => {
+    setTimeout(() => {
+      console.log(new Date(), 'Process terminated listening to', host);
+      listenSubProcess(host);
+    }, 1000);
+  })
+}

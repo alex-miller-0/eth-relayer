@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+// Starts a daemon process to listen to all relayed messages on a particular
+// host (e.g. http://mainnet.infura.io). These are found as "gateway" in
+// networks.js
+
+const Web3 = require('Web3');
+const host = process.argv[2];
+const web3 = new Web3(new Web3.providers.HttpProvider(host));
+
+// Subscribe to all Deposit events on this chain.
+const TrustedRelayAbi = require('../build/contracts/TrustedRelay.json').abi;
+const contract = new web3.eth.Contract(TrustedRelayAbi, process.argv[3]);
+const sub = contract.events.Deposit({}, (err, evt) => {
+  if (err) throw err;
+  console.log(`${new Date()} ${host} ${contract.address} event: ${evt}`);
+})
+.on('data', (evt) => { logsCache.push(evt); })
+.on('error', (err) => { throw err; })
+
+// Cache the logs
+let logsCache = [];
+
+
+setInterval(() => {
+  console.log('logscache', logsCache);
+}, 1000)

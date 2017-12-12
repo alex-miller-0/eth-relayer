@@ -495,13 +495,6 @@ contract('TrustedRelay', (accounts) => {
   });
 
   describe('Cleanup', async () => {
-    // it('should get events', async () => {
-    //   await parentRelay.allEvents({ }, { fromBlock: 0, toBlock: 'latest' }, (err, events) => {
-    //     console.log('err', err);
-    //     console.log('events', events);
-    //   });
-    // });
-
     it('should write the networks file', async () => {
       jsonfile.writeFile(NETWORK_F, networks, { spaces: 2 }, (err) => {
         if (err) console.log('Error writing networks.json', err);
