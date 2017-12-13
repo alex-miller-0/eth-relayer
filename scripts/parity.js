@@ -16,6 +16,11 @@ const password = 'password';
 const DATA_DIR = `${process.cwd()}/scripts/poa`;
 if(fs.existsSync(DATA_DIR)) { rmrfDirSync(DATA_DIR) };
 fs.mkdirSync(DATA_DIR);
+// Get rid of the networks file - we will be updating it
+const networksF = `${process.cwd()}/networks.json`;
+if(fs.existsSync(networksF)) {
+  fs.unlinkSync(networksF);
+};
 // Create a bunch of config filges given ports specified in the script arguments
 const ports = process.argv.slice(2)
 

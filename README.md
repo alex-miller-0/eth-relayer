@@ -62,6 +62,8 @@ npm run test
 
 ## Testing Daemon with Parity PoA
 
+*NOTE: I recommend upgrading to at least Parity v1.8.4*
+
 If you want to run the relayer daemon, you need to use Parity or Geth, as the daemon uses web3.js 1.0 event pub/sub and websocket listening is not allowed in TestRPC/Ganache. I have included a convenience script to boot one or more parity nodes locally given a series of ports. You can run it with:
 
 ```
@@ -71,6 +73,17 @@ npm run party <port1> <port2> ... <portN>
 *NOTE: Ports must be 4+ integers apart!*
 
 This will fork N child processes as parity proof-of-authority networks using your seed phrase in `secrets.json`. The data is in `scripts/poa/<port>`.
+
+## Migrations
+
+You can run a deployment of the Gateway contract (`TrustedRelay.sol`) with
+
+```
+truffle migrate
+```
+
+This can be done with any network, specified with the `--network` flag and configured in `truffle.js`. When you run this, it will update your `networks.json` file to include your new Gateway contract. This configuration can be used in the [front-end react app](https://github.com/alex-miller-0/trusted-relay-app).
+
 
 ## (react app) Exporting config
 
