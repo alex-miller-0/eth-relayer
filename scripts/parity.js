@@ -42,8 +42,95 @@ const ports = process.argv.slice(2)
 // Create a set of parity config files
 ports.forEach((_port, i) => {
   const port = parseInt(_port);
-  let tmpConfig = {
-    name: `LocalPoA_${port}`,
+  const chainName = `LocalPoA_${port}`;
+  let tmpConfig = genConfig(chainName, port);
+  addrs.forEach((addr) => {
+    tmpConfig.accounts[addr] = { "balance": "1000000000000000000000" };
+  });
+  const PATH = `${DATA_DIR}/${port}`;
+  if(!fs.existsSync(PATH)) { fs.mkdirSync(PATH); }
+  jsonfile.writeFile(`${PATH}/config.json`, tmpConfig, { spaces: 2 }, () => {
+
+    // Create a signer for the chain
+    const session = new Spectcl();
+    const cmd = `parity account new --chain ${PATH}/config.json --keys-path ${PATH}/keys`;
+    session.spawn(cmd)
+    session.expect([
+      'Type password:', function(match, matched, outer_cb){
+          session.send('password\n')
+          session.expect([
+              'Repeat password:', function(match, matched, inner_cb){
+                  session.send('password\n')
+                  inner_cb()
+              }
+          ], function(err){
+              outer_cb()
+          })
+      }
+    ], function(err){
+      if (err) { throw err; }
+      // NOTE: I had to add a timeout because there was a race condition.
+      // 300ms seems to work but if you're getting errors try increasing it.
+      setTimeout(() => {
+        // // Get address from the new wallet
+        jsonfile.readFile(`${PATH}/config.json`, (err, file) => {
+          // Add signer to it
+          const fname = fs.readdirSync(`${PATH}/keys/${chainName}`)[0];
+          const _k = fs.readFileSync(`${PATH}/keys/${chainName}/${fname}`);
+          const k = JSON.parse(_k);
+          const signer = `0x${k.address}`;
+          let config = file;
+          console.log('signer', signer)
+          config.accounts[signer] = { "balance": "1000000000000000000000" };
+          jsonfile.writeFile(`${PATH}/config.json`, config, { spaces: 2}, () => {
+            // Spawn the parity process
+            const access = fs.createWriteStream(`${PATH}/log`, { flags: 'a' });
+            const error = fs.createWriteStream(`${PATH}/error.log`, { flags: 'a' });
+            // Allow web sockets (for listening on events)
+            const wsPort = String(port + 1);
+            const parity = spawn('parity', ['--chain', `${PATH}/config.json`, '-d', `${PATH}/data`,
+              '--jsonrpc-port', String(port), '--ws-port', wsPort, '--port', String(port+2),
+              '--ui-port', String(port+3), '--force-sealing',
+              '--jsonrpc-apis', 'web3,eth,net,personal,parity,parity_set,traces,rpc,parity_accounts',
+              '--author', signer, '--engine-signer', signer, '--reseal-on-txs', 'all',
+              '--rpccorsdomain', '*', '--jsonrpc-interface', 'all',
+              '--jsonrpc-hosts', 'all', '--keys-path', `${PATH}/keys`,
+              '--unlock', signer, '--password', `${DATA_DIR}/../pw`],
+              { stdio: 'pipe', cwd: PATH });
+            parity.stdout.pipe(access);
+            parity.stderr.pipe(error);
+            parity.on('close', () => {
+              setTimeout(() => {
+                console.log(new Date(), `Parity killed (RPC port ${port})`);
+              }, 1000);
+            });
+
+            console.log(`${new Date()} Parity PoA chain #${i} started. RPC port=${port} WS port=${wsPort}`);
+          })
+        });
+      }, 500)
+    })
+
+  });
+});
+
+function rmrfDirSync(path) {
+  if (fs.existsSync(path)) {
+    fs.readdirSync(path).forEach(function(file, index){
+      var curPath = path + "/" + file;
+      if (fs.lstatSync(curPath).isDirectory()) { // recurse
+        rmrfDirSync(curPath);
+      } else { // delete file
+        fs.unlinkSync(curPath);
+      }
+    });
+    fs.rmdirSync(path);
+  }
+};
+
+function genConfig(name, port) {
+  const config = {
+    name: name,
     engine: {
       instantSeal: { params: {} }
     },
@@ -71,66 +158,5 @@ ports.forEach((_port, i) => {
       "0x0000000000000000000000000000000000000004": { "balance": "1", "builtin": { "name": "identity", "pricing": { "linear": { "base": 15, "word": 3 } } } }
     }
   };
-  addrs.forEach((addr) => {
-    tmpConfig.accounts[addr] = { "balance": "1000000000000000000000" };
-  });
-  const PATH = `${DATA_DIR}/${port}`;
-  if(!fs.existsSync(PATH)) { fs.mkdirSync(PATH); }
-  jsonfile.writeFile(`${PATH}/config.json`, tmpConfig, { spaces: 2 }, () => {});
-
-  // Allow web sockets (for listening on events)
-  const wsPort = String(port + 1);
-
-  // Create a signer for the chain
-  const session = new Spectcl();
-  const cmd = `parity account new --chain ${PATH}/config.json --keys-path ${PATH}/keys`;
-  session.spawn(cmd)
-  session.expect([
-    'Type password:', function(match, matched, outer_cb){
-        session.send('password\n')
-        session.expect([
-            'Repeat password:', function(match, matched, inner_cb){
-                session.send('password\n')
-                inner_cb()
-            }
-        ], function(err){
-            outer_cb()
-        })
-    }
-  ], function(err){ if(err) { throw err; } })
-
-  // // Spawn the parity process
-  const access = fs.createWriteStream(`${PATH}/log`, { flags: 'a' });
-  const error = fs.createWriteStream(`${PATH}/error.log`, { flags: 'a' });
-  const parity = spawn('parity', ['--chain', `${PATH}/config.json`, '-d', `${PATH}/data`,
-    '--jsonrpc-port', String(port), '--ws-port', wsPort, '--port', String(port+2),
-    '--ui-port', String(port+3), '--force-sealing',
-    '--jsonrpc-apis', 'web3,eth,net,personal,parity,parity_set,traces,rpc,parity_accounts',
-    '--author', addrs[0], '--engine-signer', addrs[0],
-    '--rpccorsdomain', '*', '--jsonrpc-interface', 'all',
-    '--jsonrpc-hosts', 'all'],
-    { stdio: 'pipe', cwd: PATH });
-  parity.stdout.pipe(access);
-  parity.stderr.pipe(error);
-  parity.on('close', () => {
-    setTimeout(() => {
-      console.log(new Date(), `Parity killed (RPC port ${port})`);
-    }, 1000);
-  });
-
-  console.log(`${new Date()} Parity PoA chain #${i} started. RPC port=${port} WS port=${wsPort}`);
-});
-
-function rmrfDirSync(path) {
-  if (fs.existsSync(path)) {
-    fs.readdirSync(path).forEach(function(file, index){
-      var curPath = path + "/" + file;
-      if (fs.lstatSync(curPath).isDirectory()) { // recurse
-        rmrfDirSync(curPath);
-      } else { // delete file
-        fs.unlinkSync(curPath);
-      }
-    });
-    fs.rmdirSync(path);
-  }
-};
+  return config;
+}
