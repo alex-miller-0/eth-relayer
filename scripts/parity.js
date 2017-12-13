@@ -1,7 +1,9 @@
 // Boot a parity PoA chain (single node) with one or more specified ports
+const Promise = require('bluebird').Promise;
 const secrets = require('../secrets.json');
 const bip39 = require('bip39');
 const hdkey = require('ethereumjs-wallet/hdkey');
+const ethWallet = require('ethereumjs-wallet');
 const fs = require('fs');
 const jsonfile = require('jsonfile');
 const spawn = require('child_process').spawn;
@@ -14,105 +16,121 @@ const password = 'password';
 const DATA_DIR = `${process.cwd()}/scripts/poa`;
 if(fs.existsSync(DATA_DIR)) { rmrfDirSync(DATA_DIR) };
 fs.mkdirSync(DATA_DIR);
-
-function generateFirstWallets(n, _wallets, hdPathIndex) {
-  const hdwallet = hdkey.fromMasterSeed(bip39.mnemonicToSeed(secrets.mnemonic));
-  const node = hdwallet.derivePath(secrets.hdPath + hdPathIndex.toString());
-  const secretKey = node.getWallet().getPrivateKeyString();
-  const addr = node.getWallet().getAddressString();
-  _wallets.push([addr, secretKey]);
-  const nextHDPathIndex = hdPathIndex + 1;
-  if (nextHDPathIndex >= n) {
-    return _wallets;
-  }
-  return generateFirstWallets(n, _wallets, nextHDPathIndex);
-}
-
-// Pull wallets out of the secret mnemonic
-const wallets = generateFirstWallets(10, [], 0);
-let keys = [];
-let addrs = [];
-wallets.forEach((wallet) => {
-  keys.push(wallet[1]);
-  addrs.push(wallet[0]);
-});
-
 // Create a bunch of config filges given ports specified in the script arguments
 const ports = process.argv.slice(2)
-// Create a set of parity config files
-ports.forEach((_port, i) => {
+
+// Pull wallets out of the secret mnemonic
+const wallets = generateFirstWallets(5, [], 0);
+let keystores = [];
+let addrs = [];
+
+// ============================================================================
+// MAIN FUNCTION
+// ============================================================================
+Promise.map(ports, (_port, i) => {
   const port = parseInt(_port);
-  const chainName = `LocalPoA_${port}`;
-  let tmpConfig = genConfig(chainName, port);
-  addrs.forEach((addr) => {
-    tmpConfig.accounts[addr] = { "balance": "1000000000000000000000" };
-  });
   const PATH = `${DATA_DIR}/${port}`;
-  if(!fs.existsSync(PATH)) { fs.mkdirSync(PATH); }
-  jsonfile.writeFile(`${PATH}/config.json`, tmpConfig, { spaces: 2 }, () => {
+  const chainName = `LocalPoA_${port}`;
+  if(!fs.existsSync(PATH)) {
+    fs.mkdirSync(PATH);
+    fs.mkdirSync(`${PATH}/keys`);
+    fs.mkdirSync(`${PATH}/keys/${chainName}`);
+  }
 
-    // Create a signer for the chain
-    const session = new Spectcl();
-    const cmd = `parity account new --chain ${PATH}/config.json --keys-path ${PATH}/keys`;
-    session.spawn(cmd)
-    session.expect([
-      'Type password:', function(match, matched, outer_cb){
-          session.send('password\n')
+
+  Promise.map(wallets, (wallet) => {
+    addrs.push(wallet[0]);
+    const keystore = ethWallet.fromPrivateKey(Buffer.from(wallet[1].slice(2), 'hex'));
+    const keystore2 = keystore.toV3String(password);
+    keystores.push(keystore);
+    fs.writeFileSync(`${PATH}/keys/${chainName}/${wallet[0]}`, keystore2);
+    return;
+  })
+  .then(() => {
+    let tmpConfig = genConfig(chainName, port);
+    addrs.forEach((addr) => {
+      tmpConfig.accounts[addr] = { "balance": "1000000000000000000000" };
+    });
+    jsonfile.writeFile(`${PATH}/config.json`, tmpConfig, { spaces: 2 }, () => {
+
+      // Create a signer for the chain
+      const session = new Spectcl();
+      const cmd = `parity account new --chain ${PATH}/config.json --keys-path ${PATH}/keys`;
+      session.spawn(cmd)
+      session.expect([
+        'Type password:', function(match, matched, outer_cb){
+          session.send(`${password}\n`);
           session.expect([
-              'Repeat password:', function(match, matched, inner_cb){
-                  session.send('password\n')
-                  inner_cb()
-              }
-          ], function(err){
+            'Repeat password:', function(match, matched, inner_cb){
+              session.send(`${password}\n`);
+              inner_cb()
+            }], function(err){
               outer_cb()
-          })
-      }
-    ], function(err){
-      if (err) { throw err; }
-      // NOTE: I had to add a timeout because there was a race condition.
-      // 300ms seems to work but if you're getting errors try increasing it.
-      setTimeout(() => {
-        // // Get address from the new wallet
-        jsonfile.readFile(`${PATH}/config.json`, (err, file) => {
-          // Add signer to it
-          const fname = fs.readdirSync(`${PATH}/keys/${chainName}`)[0];
-          const _k = fs.readFileSync(`${PATH}/keys/${chainName}/${fname}`);
-          const k = JSON.parse(_k);
-          const signer = `0x${k.address}`;
-          let config = file;
-          console.log('signer', signer)
-          config.accounts[signer] = { "balance": "1000000000000000000000" };
-          jsonfile.writeFile(`${PATH}/config.json`, config, { spaces: 2}, () => {
-            // Spawn the parity process
-            const access = fs.createWriteStream(`${PATH}/log`, { flags: 'a' });
-            const error = fs.createWriteStream(`${PATH}/error.log`, { flags: 'a' });
-            // Allow web sockets (for listening on events)
-            const wsPort = String(port + 1);
-            const parity = spawn('parity', ['--chain', `${PATH}/config.json`, '-d', `${PATH}/data`,
-              '--jsonrpc-port', String(port), '--ws-port', wsPort, '--port', String(port+2),
-              '--ui-port', String(port+3), '--force-sealing',
-              '--jsonrpc-apis', 'web3,eth,net,personal,parity,parity_set,traces,rpc,parity_accounts',
-              '--author', signer, '--engine-signer', signer, '--reseal-on-txs', 'all',
-              '--rpccorsdomain', '*', '--jsonrpc-interface', 'all',
-              '--jsonrpc-hosts', 'all', '--keys-path', `${PATH}/keys`,
-              '--unlock', signer, '--password', `${DATA_DIR}/../pw`],
-              { stdio: 'pipe', cwd: PATH });
-            parity.stdout.pipe(access);
-            parity.stderr.pipe(error);
-            parity.on('close', () => {
-              setTimeout(() => {
-                console.log(new Date(), `Parity killed (RPC port ${port})`);
-              }, 1000);
+            }
+          )
+        }
+      ], function(err){
+        if (err) { throw err; }
+        // NOTE: I had to add a timeout because there was a race condition.
+        // 300ms seems to work but if you're getting errors try increasing it.
+        setTimeout(() => {
+          // // Get address from the new wallet
+          jsonfile.readFile(`${PATH}/config.json`, (err, file) => {
+            // Add signer to it
+            const fnames = fs.readdirSync(`${PATH}/keys/${chainName}`);
+            let fname;
+            fnames.forEach((f) => {
+              if (f.substring(0, 5) == 'UTC--') { fname = f; }
             });
+            const _k = fs.readFileSync(`${PATH}/keys/${chainName}/${fname}`);
+            const k = JSON.parse(_k);
+            const signer = `0x${k.address}`;
+            let config = file;
+            config.accounts[signer] = { "balance": "1000000000000000000000" };
+            jsonfile.writeFile(`${PATH}/config.json`, config, { spaces: 2}, () => {
+              // Spawn the parity process
+              const access = fs.createWriteStream(`${PATH}/log`, { flags: 'a' });
+              const error = fs.createWriteStream(`${PATH}/error.log`, { flags: 'a' });
+              // Allow web sockets (for listening on events)
+              const wsPort = String(port + 1);
 
-            console.log(`${new Date()} Parity PoA chain #${i} started. RPC port=${port} WS port=${wsPort}`);
-          })
-        });
-      }, 500)
-    })
+              // Set up parity config
+              let args = ['--chain', `${PATH}/config.json`, '-d', `${PATH}/data`,
+                '--jsonrpc-port', String(port), '--ws-port', wsPort, '--port', String(port+2),
+                '--ui-port', String(port+3),
+                '--jsonrpc-apis', 'web3,eth,net,personal,parity,parity_set,traces,rpc,parity_accounts',
+                '--author', signer, '--engine-signer', signer, '--reseal-on-txs', 'all', '--force-sealing',
+                '--rpccorsdomain', '*', '--jsonrpc-interface', 'all', '--reseal-max-period', '0', '--reseal-min-period', '0',
+                '--jsonrpc-hosts', 'all', '--keys-path', `${PATH}/keys`];
 
-  });
-});
+              // Unlock signer AND first 5 addresses from seed phrase
+              let unlock = signer;
+              addrs.forEach((addr) => { unlock += `,${addr}`; })
+              let pwfile = `${DATA_DIR}/../pw`
+              args.push('--unlock');
+              args.push(unlock);
+              args.push('--password');
+              args.push(pwfile);
+
+              const parity = spawn('parity', args,
+                { stdio: 'pipe', cwd: PATH });
+              parity.stdout.pipe(access);
+              parity.stderr.pipe(error);
+              parity.on('close', () => {
+                setTimeout(() => {
+                  console.log(new Date(), `Parity killed (RPC port ${port})`);
+                }, 500);
+              });
+
+              console.log(`${new Date()} Parity PoA chain #${i} started. RPC port=${port} WS port=${wsPort}`);
+            })
+          });
+        }, 500)
+      })
+    });
+  })
+})
+
 
 function rmrfDirSync(path) {
   if (fs.existsSync(path)) {
@@ -132,7 +150,7 @@ function genConfig(name, port) {
   const config = {
     name: name,
     engine: {
-      instantSeal: { params: {} }
+      instantSeal: null
     },
     params: {
       gasLimitBoundDivisor: "0x400",
@@ -159,4 +177,17 @@ function genConfig(name, port) {
     }
   };
   return config;
+}
+
+function generateFirstWallets(n, _wallets, hdPathIndex) {
+  const hdwallet = hdkey.fromMasterSeed(bip39.mnemonicToSeed(secrets.mnemonic));
+  const node = hdwallet.derivePath(secrets.hdPath + hdPathIndex.toString());
+  const secretKey = node.getWallet().getPrivateKeyString();
+  const addr = node.getWallet().getAddressString();
+  _wallets.push([addr, secretKey]);
+  const nextHDPathIndex = hdPathIndex + 1;
+  if (nextHDPathIndex >= n) {
+    return _wallets;
+  }
+  return generateFirstWallets(n, _wallets, nextHDPathIndex);
 }
