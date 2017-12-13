@@ -84,6 +84,15 @@ truffle migrate
 
 This can be done with any network, specified with the `--network` flag and configured in `truffle.js`. When you run this, it will update your `networks.json` file to include your new Gateway contract. This configuration can be used in the [front-end react app](https://github.com/alex-miller-0/trusted-relay-app).
 
+## Generating test tokens
+
+For convenience, you can create test tokens by calling:
+
+```
+npm run create-token <network> <name> <symbol> <decimals> <supply>
+```
+
+Where `<network>` is a key in your `networks.json` file. You should only run this script after you have migrated your files on a specified test network.
 
 ## (react app) Exporting config
 
