@@ -5,7 +5,11 @@ const hdkey = require('ethereumjs-wallet/hdkey');
 const fs = require('fs');
 const jsonfile = require('jsonfile');
 const spawn = require('child_process').spawn;
+const Spectcl = require('spectcl');
 
+// The password that will be used for accounts (these are temporary accounts on
+// private chains)
+const password = 'password';
 // Create a directory for the poa chain data if it doesn't exist
 const DATA_DIR = `${process.cwd()}/scripts/poa`;
 if(fs.existsSync(DATA_DIR)) { rmrfDirSync(DATA_DIR) };
@@ -41,15 +45,7 @@ ports.forEach((_port, i) => {
   let tmpConfig = {
     name: `LocalPoA_${port}`,
     engine: {
-      authorityRound: {
-        params: {
-          gasLimitBoundDivisor: "0x400",
-          stepDuration: 2,
-          validators: {
-            list: addrs,
-          }
-        }
-      }
+      instantSeal: { params: {} }
     },
     params: {
       gasLimitBoundDivisor: "0x400",
@@ -57,15 +53,16 @@ ports.forEach((_port, i) => {
       minGasLimit: "0x1388",
       networkID: `0x${port.toString(16)}`
     },
-    genesis: {
-      seal: {
-        authorityRound: {
-          step: "0x0",
-          signature: "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-        }
-      },
-      difficulty: "0x20000",
-      gasLimit: "0x5B8D80"
+    "genesis": {
+        "seal": {
+          "generic": "0x0"
+        },
+        "difficulty": "0x20000",
+        "author": "0x0000000000000000000000000000000000000000",
+        "timestamp": "0x00",
+        "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "extraData": "0x",
+        "gasLimit": "0x1312d00"
     },
     accounts: {
       "0x0000000000000000000000000000000000000001": { "balance": "1", "builtin": { "name": "ecrecover", "pricing": { "linear": { "base": 3000, "word": 0 } } } },
@@ -84,13 +81,34 @@ ports.forEach((_port, i) => {
   // Allow web sockets (for listening on events)
   const wsPort = String(port + 1);
 
-  // Spawn the parity process
+  // Create a signer for the chain
+  const session = new Spectcl();
+  const cmd = `parity account new --chain ${PATH}/config.json --keys-path ${PATH}/keys`;
+  session.spawn(cmd)
+  session.expect([
+    'Type password:', function(match, matched, outer_cb){
+        session.send('password\n')
+        session.expect([
+            'Repeat password:', function(match, matched, inner_cb){
+                session.send('password\n')
+                inner_cb()
+            }
+        ], function(err){
+            outer_cb()
+        })
+    }
+  ], function(err){ if(err) { throw err; } })
+
+  // // Spawn the parity process
   const access = fs.createWriteStream(`${PATH}/log`, { flags: 'a' });
   const error = fs.createWriteStream(`${PATH}/error.log`, { flags: 'a' });
   const parity = spawn('parity', ['--chain', `${PATH}/config.json`, '-d', `${PATH}/data`,
     '--jsonrpc-port', String(port), '--ws-port', wsPort, '--port', String(port+2),
-    '--ui-port', String(port+3),
-    '--jsonrpc-apis', 'web3,eth,net,personal,parity,parity_set,traces,rpc,parity_accounts'],
+    '--ui-port', String(port+3), '--force-sealing',
+    '--jsonrpc-apis', 'web3,eth,net,personal,parity,parity_set,traces,rpc,parity_accounts',
+    '--author', addrs[0], '--engine-signer', addrs[0],
+    '--rpccorsdomain', '*', '--jsonrpc-interface', 'all',
+    '--jsonrpc-hosts', 'all'],
     { stdio: 'pipe', cwd: PATH });
   parity.stdout.pipe(access);
   parity.stderr.pipe(error);

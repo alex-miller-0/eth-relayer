@@ -46,6 +46,7 @@
     "jsonfile": "^4.0.0",
     "left-pad": "^1.1.3",
     "solidity-sha3": "^0.4.1",
+    "spectcl": "^0.6.3",
     "truffle-artifactor": "^3.0.0",
     "truffle-hdwallet-provider": "0.0.3",
     "web3": "^1.0.0-beta.26"
