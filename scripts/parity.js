@@ -106,7 +106,7 @@ Promise.map(ports, (_port, i) => {
                 '--jsonrpc-apis', 'web3,eth,net,personal,parity,parity_set,traces,rpc,parity_accounts',
                 '--author', signer, '--engine-signer', signer, '--reseal-on-txs', 'all', '--force-sealing',
                 '--rpccorsdomain', '*', '--jsonrpc-interface', 'all', '--reseal-max-period', '0', '--reseal-min-period', '0',
-                '--jsonrpc-hosts', 'all', '--keys-path', `${PATH}/keys`];
+                '--jsonrpc-hosts', 'all', '--keys-path', `${PATH}/keys`, '--no-persistent-txqueue'];
 
               // Unlock signer AND first 5 addresses from seed phrase
               let unlock = signer;
@@ -159,7 +159,7 @@ function genConfig(name, port) {
     params: {
       gasLimitBoundDivisor: "0x400",
       maximumExtraDataSize: "0x20",
-      minGasLimit: "0x1388",
+      minGasLimit: "0x1312d00",
       networkID: `0x${port.toString(16)}`
     },
     "genesis": {

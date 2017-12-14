@@ -5,25 +5,29 @@
 const Promise = require('bluebird').Promise;
 const Web3 = require('Web3');
 const signing = require('./lib/signing.js');
+const query = require('./lib/query.js');
 
 // Setup a web3 websocket instance
-const host = process.argv[2];
-const web3 = new Web3(new Web3.providers.WebsocketProvider(host));
+const wsHost = process.argv[2];
+const web3ws = new Web3(new Web3.providers.WebsocketProvider(wsHost));
+// const web3rpc = new Web3(new Web3.providers.HttpProvider(rpcHost));
 
 // Cached messages that have been played
 let cache = [];
 
 // Signer should be the default account (this needs to be unlocked)
 const signer = signing.getAddr(0);
+query.setSender(signer);
 
 // Subscribe to all Deposit events on this chain.
 const TrustedRelayAbi = require('../build/contracts/TrustedRelay.json').abi;
-const contract = new web3.eth.Contract(TrustedRelayAbi, process.argv[3]);
-const addr = contract.options.address
+// const rpcContract = new web3rpc.eth.Contract(TrustedRelayAbi, process.argv[4]);
+const wsContract = new web3ws.eth.Contract(TrustedRelayAbi, process.argv[4]);
+const addr = wsContract.options.address
 
-const depositSub = contract.events.Deposit({}, (err, evt) => {
+const depositSub = wsContract.events.Deposit({}, (err, evt) => {
   if (err) throw err;
-  console.log(`##${new Date().getTime()}## ${host} ${contract.address} Deposit event: ${evt}`);
+  console.log(`##${new Date().getTime()}## ${wsHost} ${wsContract.address} Deposit event: ${evt}`);
 })
 .on('error', (err) => { throw err; })
 .on('data', (evt) => {
@@ -43,28 +47,52 @@ const depositSub = contract.events.Deposit({}, (err, evt) => {
       s: d['2']
     }
   };
-  process.send(tmp);
+  process.send({ type: 'deposit', to: d.toChain, body: tmp });
   cache.push(d['0']);
 })
 
 // Subscribe to all relays on this chain
-const relaySub = contract.events.RelayedDeposit({}, (err, evt) => {
+const relaySub = wsContract.events.RelayedDeposit({}, (err, evt) => {
   if (err) throw err;
-  console.log(`##${new Date().getTime()}## ${host} ${contract.address} RelayedDeposit event: ${evt}`);
+  console.log(`##${new Date().getTime()}## ${wsHost} ${wsContract.options.address} RelayedDeposit event: ${evt}`);
 })
 
 // Listen for messages
 process.on('message', (m) => {
-  if (m.toChain != addr) {
-    console.error(`${addr} WARNING: Got message intended for ${m.toChain}`)
-  }
-  console.log('got message from pool', m);
-  contract.methods.relayDeposit(m.sig.m, m.sig.v, m.sig.r, m.sig.s,
-    [m.token, m.sender], m.amount, m.fromChain, [m.fee, m.timestamp])
-    .send({ from: signer, gas: 300000 })
-    .then((receipt) => {
-      console.log('sent relay?', receipt)
+  if (m.type == 'deposit') {
+    query.findTokenMapping(m.body.fromChain, m.body.oldToken, wsContract)
+    .then((mapping) => {
+      if (!mapping) {
+        // If there's no mapping, we need to create a token on this chain. We
+        // need the code at the contract first.
+        const mBody = { contractAddr: m.body.oldToken };
+        process.send({ type: 'tokenReq', to: m.body.fromChain, from: addr, body: mBody });
+        return;
+      } else {
+        return;
+      }
     })
+    .then(() => { })
+    .catch((err) => { throw err; })
+  } else if (m.type == 'tokenReq') {
+    // If another process is asking for the code at a contract, query it and
+    // return the payload.
+    query.getToken(m.body.contractAddr, web3ws)
+    .then((token) => {
+      process.send({ type: 'tokenRes', to: m.from, from: addr, body: token })
+    })
+  } else if (m.type == 'tokenRes') {
+    // If the process returns code, create a new contract with it
+    query.createContract(m.body, signer, web3ws)
+    .then((newTokenAddr) => {
+      return query.createTokenMapping(m.body.addr, newTokenAddr, m.from, wsContract)
+    })
+    .then((receipt) => {
+      console.log('created mapping', receipt);
+    })
+    .catch((err) => { throw err; })
+  }
+
 })
 
 // Keep alive

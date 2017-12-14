@@ -15,7 +15,7 @@ const error = fs.createWriteStream('./daemon.error.log', { flags: 'a' });
 
 const hosts = [];
 Object.keys(networks).forEach((n) => {
-  hosts.push([networks[n].wsProvider, networks[n].value]);
+  hosts.push([networks[n].wsProvider, networks[n].gateway, networks[n].value]);
 })
 
 let processes = {};
@@ -26,11 +26,10 @@ hosts.forEach((host) => {
 
 // Start a subprocess to listen on a host
 function listenSubProcess(host) {
-  const daemon = spawn(`./daemon/daemon`, [host[0], host[1]],
+  const daemon = spawn(`./daemon/daemon`, host,
     { stdio: ['pipe', 'pipe', 'pipe', 'ipc'] })
   // Keep the process in a store for messaging
-  processes[host[1].toLowerCase()] = daemon;
-  console.log('host[1]', host[1])
+  processes[host[2].toLowerCase()] = daemon;
   daemon.stdout.pipe(access);
   daemon.stderr.pipe(error);
   daemon.on('close', () => {
@@ -39,9 +38,9 @@ function listenSubProcess(host) {
       listenSubProcess(host);
     }, 1000);
   })
+
+  // Every message is of form: { to, from, body }
   daemon.on('message', (message) => {
-    console.log('got messae from child', message)
-    console.log('processes', Object.keys(processes))
-    processes[message.toChain.toLowerCase()].send(message);
+    processes[message.to.toLowerCase()].send(message);
   })
 }

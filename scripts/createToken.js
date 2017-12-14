@@ -23,7 +23,7 @@ const supply = process.argv[6] || 1000;
 
 
 const hdwallet = hdkey.fromMasterSeed(bip39.mnemonicToSeed(secrets.mnemonic));
-const node = hdwallet.derivePath(secrets.hdPath + '0');
+const node = hdwallet.derivePath(secrets.hdPath + '1'); // Generating from accounts[1]
 const addr = node.getWallet().getAddressString();
 
 const Token = new web3.eth.Contract(tokenAbi);
