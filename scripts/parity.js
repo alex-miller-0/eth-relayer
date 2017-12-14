@@ -117,8 +117,7 @@ Promise.map(ports, (_port, i) => {
               args.push('--password');
               args.push(pwfile);
 
-              const parity = spawn('parity', args,
-                { stdio: 'pipe', cwd: PATH });
+              const parity = spawn('parity', args, { stdio: 'pipe', cwd: PATH });
               parity.stdout.pipe(access);
               parity.stderr.pipe(error);
               parity.on('close', () => {

@@ -39,6 +39,6 @@ Token.deploy({
   if (!networks.tokens[network]) { networks.tokens[network] = {}; }
   networks.tokens[network][contractAddr] = { name, symbol, decimals, supply };
   jsonfile.writeFile(`${process.cwd()}/networks.json`, networks, { spaces: 2 }, () => {
-    console.log(`Saved token to network ${network}: name='${name}' symbol='${symbol}' decimals='${decimals}' supply=${supply}`)
+    console.log(`Saved token to network ${network}: ${contractAddr}`)
   })
 });

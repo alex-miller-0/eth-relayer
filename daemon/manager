@@ -4,19 +4,33 @@
 const networks = require('../networks.json').networks;
 const spawn = require('child_process').spawn;
 const fs = require('fs');
+
+const logF = `${process.cwd()}/daemon.log`;
+const errorF = `${process.cwd()}/daemon.error.log`;
+if(fs.existsSync(logF)) { fs.unlinkSync(logF); };
+if(fs.existsSync(errorF)) { fs.unlinkSync(errorF); };
+
 const access = fs.createWriteStream('./daemon.log', { flags: 'a' });
 const error = fs.createWriteStream('./daemon.error.log', { flags: 'a' });
 
 const hosts = [];
-Object.keys(networks).forEach((n) => { hosts.push([networks[n].gateway, networks[n].value]); })
+Object.keys(networks).forEach((n) => {
+  hosts.push([networks[n].wsProvider, networks[n].value]);
+})
 
+let processes = {};
 hosts.forEach((host) => {
   listenSubProcess(host);
 })
 
+
 // Start a subprocess to listen on a host
 function listenSubProcess(host) {
-  const daemon = spawn(`./daemon/daemon`, [host[0], host[1]], { stdio: 'pipe' })
+  const daemon = spawn(`./daemon/daemon`, [host[0], host[1]],
+    { stdio: ['pipe', 'pipe', 'pipe', 'ipc'] })
+  // Keep the process in a store for messaging
+  processes[host[1].toLowerCase()] = daemon;
+  console.log('host[1]', host[1])
   daemon.stdout.pipe(access);
   daemon.stderr.pipe(error);
   daemon.on('close', () => {
@@ -24,5 +38,10 @@ function listenSubProcess(host) {
       console.log(new Date(), 'Process terminated listening to', host);
       listenSubProcess(host);
     }, 1000);
+  })
+  daemon.on('message', (message) => {
+    console.log('got messae from child', message)
+    console.log('processes', Object.keys(processes))
+    processes[message.toChain.toLowerCase()].send(message);
   })
 }

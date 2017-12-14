@@ -20,11 +20,13 @@ const save = async function save(deployer) {
   const gatewayContract = relay.address;
 
   const newNetwork = {
-    name: "",
     value: relay.address,
-    gateway: host
+    gateway: host,
+    wsProvider: network.wsProvider ? network.wsProvider : `ws://${network.host}:${network.port + 1}`,
+    name: network.name ? network.name : ''
   }
   networks.networks[network_id] = newNetwork;
+
   jsonfile.writeFile(networkFile, networks, { spaces: 2 }, () => {
     console.log('networks.json file updated.')
   })

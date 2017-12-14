@@ -27,7 +27,7 @@ function generateAccounts(mnemonic, hdPathIndex, totalToGenerate, accumulatedAdd
 }
 
 try {
-  cp.execSync('npm run lint ./');
+  cp.execSync('npm run lint ./test/relay.js');
 } catch (err) {
   console.log(err.stdout.toString());
   process.exit(1);

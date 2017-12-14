@@ -8,11 +8,19 @@ const addr = node.getWallet().getAddressString();
 
 module.exports = {
   networks: {
-    development: {
+    origin: {
+      name: "Origin",
       host: 'localhost',
       port: 7545,
       network_id: '*', // Match any network id
-      from: addr,
+      from: addr
+    },
+    destination: {
+      name: "Destination",
+      host: 'localhost',
+      port: 8545,
+      network_id: '*', // Match any network id
+      from: addr
     },
     ropsten: {
       provider: new HDWalletProvider(secrets.mnemonic, 'https://ropsten.infura.io/'),
