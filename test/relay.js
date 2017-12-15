@@ -11,7 +11,7 @@ const truffleConf = require('../truffle.js').networks;
 const Web3 = require('web3');
 const jsonfile = require('jsonfile');
 
-const provider = `http://${truffleConf.devChild.host}:${truffleConf.devChild.port}`;
+const provider = `http://${truffleConf.development.host}:${truffleConf.development.port}`;
 const web3 = new Web3(new Web3.providers.HttpProvider(provider));
 
 const relayABI = require('../build/contracts/TrustedRelay.json').abi;
@@ -35,8 +35,6 @@ let etherToken = null;
 let d;
 let sig;
 let hash;
-
-// const ethQuery = new EthQuery(new HttpProvider('http://localhost:7545'));
 let wallets = [];
 
 contract('TrustedRelay', (accounts) => {
@@ -105,6 +103,7 @@ contract('TrustedRelay', (accounts) => {
     it('should check for networks file', async () => {
       try {
         networks = jsonfile.readFileSync(NETWORK_F);
+        console.log('networks', networks);
       } catch (e) {
         networks = null;
       }
@@ -343,9 +342,12 @@ contract('TrustedRelay', (accounts) => {
       const userBalance = await web3.eth.getBalance(deposit.sender);
       const expectedRelayBal = multiplier * (parseInt(tokens, 10) - deposit.amount);
       const expectedUserBal = multiplier * deposit.amount;
-      const userBalDiff = parseInt(userBalance, 10) - startingBal;
+      // const userBalDiff = parseInt(userBalance, 10) - startingBal;
+      console.log('relayBalance', relayBalance, 'expected', expectedRelayBal);
+      console.log('userBalance', userBalance, 'starting', startingBal, 'deposit',
+        multiplier * deposit.amount);
       assert(relayBalance === String(expectedRelayBal));
-      assert(String(userBalDiff) === String(expectedUserBal));
+      assert(String(userBalance) === String(expectedUserBal));
     });
 
     const zeroAddr = '0x0000000000000000000000000000000000000000';

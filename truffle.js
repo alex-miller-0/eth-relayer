@@ -22,6 +22,13 @@ module.exports = {
       network_id: '*', // Match any network id
       from: addr
     },
+    development: {
+      name: "Dev",
+      host: 'localhost',
+      port: 7546,
+      network_id: '*', // Match any network id
+      gas: 5600000
+    },
     ropsten: {
       provider: new HDWalletProvider(secrets.mnemonic, 'https://ropsten.infura.io/'),
       network_id: 3, // official id of the ropsten network

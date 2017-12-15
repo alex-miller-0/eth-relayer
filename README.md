@@ -66,13 +66,24 @@ You can generate a new BIP39 mnemonic [here](https://coinomi.com/recovery-phrase
 
 ## Running Tests
 
-In order to run the tests, you will need two local blockchains running. Assuming you already have Ganache running on port 7545, you can start a new testrpc instance on port 7546 with:
+In order to run the tests, you will need two local blockchains running. Assuming you already have Ganache running on port 7545, you can start a new testrpc instance on port 7546 with (note the raised gas limit):
 
 ```
-testrpc -p 7546 -m "public okay smoke segment forum front animal extra appear online before various cook test arrow"
+testrpc -p 7546 -l 6000000 -m "public okay smoke segment forum front animal extra appear online before various cook test arrow"
 ```
 
 *Note: the mnemonic (`-m`) must be the same as the one in your `secrets.json` file and it must also be the same one that seeded your Ganache chain (to change, click on the settings gear and go to accounts & keys).*
+
+You will also need to have a chain called `development` pointed at port 7546 in `truffle.js`; this is included by default.
+
+```
+development: {
+  name: "Dev",
+  host: 'localhost',
+  port: 7546,
+  network_id: '*',
+},
+```
 
 You can now run the tests with:
 

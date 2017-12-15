@@ -8,8 +8,9 @@ const jsonfile = require('jsonfile');
 let networks;
 try {
   networks = require(networkFile);
+  if (!networks) { networks = { networks: {} }; }
 } catch(e) {
-  networks = { networks: {} }
+  networks = { networks: {} };
 }
 
 const save = async function save(deployer) {
@@ -18,7 +19,6 @@ const save = async function save(deployer) {
   const host = `http://${network.host}:${network.port}`;
   const relay = await TrustedRelay.deployed();
   const gatewayContract = relay.address;
-
   const newNetwork = {
     value: relay.address,
     gateway: host,

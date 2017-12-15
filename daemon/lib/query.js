@@ -21,7 +21,6 @@ function relayMessage(msg, contract) {
 // will be hash, v, r, s (see: TrustedRelay.sol::depositERC20)
 function getSig(txHash, web3) {
   return new Promise((resolve, reject) => {
-    console.log('getting tx')
     web3.eth.getTransaction(txHash)
     .then((tx) => {
       // Slice off the 0x and first 4 bytes (abi signature)
@@ -40,7 +39,6 @@ function getSig(txHash, web3) {
 
 function findTokenMapping(fromChain, fromToken, contract) {
   return new Promise((resolve, reject) => {
-    console.log('findTokenMapping')
     contract.methods.getTokenMapping(fromChain, fromToken).call({}, (err, res) => {
       if (err) { return reject(err); }
       if (res == zeroAddr) { return resolve(null); }
