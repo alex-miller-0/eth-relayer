@@ -6,8 +6,41 @@ let sender;
 
 function setSender(_sender) { sender = _sender;}
 
+function relayMessage(msg, contract) {
+  return new Promise((resolve, reject) => {
+    contract.methods.relayDeposit(msg.sig.m, msg.sig.v, msg.sig.r, msg.sig.s,
+      [msg.oldToken, msg.sender], msg.amount, msg.fromChain, [msg.fee, msg.timestamp])
+      .send({ from: sender, gas: 500000 })
+      .then((receipt) => { return resolve(receipt); })
+      .catch((err) => { return reject(err); })
+  })
+}
+
+
+// Given a transaction hash, query the input. The first four words (256 bits each)
+// will be hash, v, r, s (see: TrustedRelay.sol::depositERC20)
+function getSig(txHash, web3) {
+  return new Promise((resolve, reject) => {
+    console.log('getting tx')
+    web3.eth.getTransaction(txHash)
+    .then((tx) => {
+      // Slice off the 0x and first 4 bytes (abi signature)
+      const input = tx.input.slice(10);
+      let sig = {
+        m: `0x${input.substr(0, 64)}`,
+        v: parseInt(input.substr(64, 64), 16),
+        r: `0x${input.substr(128, 64)}`,
+        s: `0x${input.substr(192, 64)}`
+      }
+      return resolve(sig);
+    })
+    .catch((err) => { return reject(err); })
+  })
+}
+
 function findTokenMapping(fromChain, fromToken, contract) {
   return new Promise((resolve, reject) => {
+    console.log('findTokenMapping')
     contract.methods.getTokenMapping(fromChain, fromToken).call({}, (err, res) => {
       if (err) { return reject(err); }
       if (res == zeroAddr) { return resolve(null); }
@@ -45,15 +78,23 @@ function getToken(addr, web3) {
 // Create a new ERC20 token contract with the token params found on the other
 // chain. Note that this is NOT the same thing as the code that currently
 // exists at the other contract (that contains state data)
-function createContract(token, deployer, web3) {
+function createContract(token, deployer, relayAddr, web3) {
   return new Promise((resolve, reject) => {
     // First get the token data
     const NewToken = new web3.eth.Contract(tokenAbi)
+    let newAddr;
     NewToken.deploy({ data: tokenBytes, arguments: [parseInt(token.totalSupply),
       token.name, parseInt(token.decimals), token.symbol] })
       .send({ from: deployer, gas: 4000000 })
       .on((err) => { return reject(err); })
-      .then((instance) => { return resolve(instance.options.address); })
+      .then((instance) => {
+        newAddr = instance.options.address;
+        // Send the entire supply to the relay contract
+        instance.methods.transfer(relayAddr, parseInt(token.totalSupply))
+          .send({ from: deployer, gas: 100000 })
+          .on((err) => { return reject(err); })
+          .then(() => { return resolve(newAddr); })
+      })
   })
 }
 
@@ -66,6 +107,8 @@ function createTokenMapping(oldTokenAddr, newTokenAddr, fromChain, contract) {
   })
 }
 
+exports.getSig = getSig;
+exports.relayMessage = relayMessage;
 exports.setSender = setSender;
 exports.findTokenMapping = findTokenMapping;
 exports.getToken = getToken;

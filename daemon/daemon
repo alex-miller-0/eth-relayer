@@ -40,15 +40,14 @@ const depositSub = wsContract.events.Deposit({}, (err, evt) => {
     amount: d.amount,
     fee: d.fee,
     timestamp: d.tsIncl,
-    sig: {
-      m: d['0'],
-      v: d['3'],
-      r: d['1'],
-      s: d['2']
-    }
   };
-  process.send({ type: 'deposit', to: d.toChain, body: tmp });
-  cache.push(d['0']);
+  query.getSig(evt.transactionHash, web3ws)
+  .then((sig) => {
+    tmp.sig = sig;
+    process.send({ type: 'deposit', to: d.toChain, body: tmp });
+    cache.push(d['0']);
+  })
+  .catch((err) => { throw err; })
 })
 
 // Subscribe to all relays on this chain
@@ -59,38 +58,56 @@ const relaySub = wsContract.events.RelayedDeposit({}, (err, evt) => {
 
 // Listen for messages
 process.on('message', (m) => {
+  console.log(wsHost, m)
   if (m.type == 'deposit') {
+    // Deposit message is played to the destination chain
     query.findTokenMapping(m.body.fromChain, m.body.oldToken, wsContract)
     .then((mapping) => {
       if (!mapping) {
         // If there's no mapping, we need to create a token on this chain. We
         // need the code at the contract first.
-        const mBody = { contractAddr: m.body.oldToken };
+        const mBody = { contractAddr: m.body.oldToken, relay: m.body };
         process.send({ type: 'tokenReq', to: m.body.fromChain, from: addr, body: mBody });
         return;
       } else {
-        return;
+        return query.relayMessage(m.body, wsContract)
+        .then((receipt) => {
+          console.log('Relayed message to', mapping);
+        })
+        .catch((err) => { throw err; })
       }
     })
     .then(() => { })
     .catch((err) => { throw err; })
   } else if (m.type == 'tokenReq') {
-    // If another process is asking for the code at a contract, query it and
-    // return the payload.
+    // If the destination can't find a mapping, it will send a message back to
+    // the origin and ask for token info with which it can deploy a new token.
     query.getToken(m.body.contractAddr, web3ws)
     .then((token) => {
-      process.send({ type: 'tokenRes', to: m.from, from: addr, body: token })
+      const body = { token: token, oldTokenAddr: m.body.contractAddr,
+        relay: m.body.relay };
+      process.send({ type: 'tokenRes', to: m.from, from: addr, body: body })
     })
   } else if (m.type == 'tokenRes') {
-    // If the process returns code, create a new contract with it
-    query.createContract(m.body, signer, web3ws)
+    let newToken;
+    // If the destination chain needs to deploy a token to set a mapping, it
+    // will get token info, deploy, and then create a mapping.
+    query.createContract(m.body.token, signer, addr, web3ws)
     .then((newTokenAddr) => {
-      return query.createTokenMapping(m.body.addr, newTokenAddr, m.from, wsContract)
+      console.log('token created', newTokenAddr)
+      // Once the token is created, create the mapping
+      return query.createTokenMapping(m.body.oldTokenAddr, newTokenAddr, m.from, wsContract)
+    })
+    .then((mapping) => {
+      newToken = mapping;
+      // Once the mapping is created, move the tokens
+      return query.relayMessage(m.body.relay, wsContract)
     })
     .then((receipt) => {
-      console.log('created mapping', receipt);
+      console.log('Relayed message to ', newToken);
     })
     .catch((err) => { throw err; })
+
   }
 
 })
