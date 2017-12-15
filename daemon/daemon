@@ -53,7 +53,7 @@ const depositSub = wsContract.events.Deposit({}, (err, evt) => {
 // Subscribe to all relays on this chain
 const relaySub = wsContract.events.RelayedDeposit({}, (err, evt) => {
   if (err) throw err;
-  console.log(`##${new Date().getTime()}## ${wsHost} ${wsContract.options.address} RelayedDeposit event: ${evt}`);
+  console.log(`##${new Date().getTime()}## ${wsHost} RelayedDeposit event: ${JSON.stringify(evt)}`);
 })
 
 // Listen for messages

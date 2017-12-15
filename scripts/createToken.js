@@ -16,8 +16,9 @@ const tokenBytes = token.bytecode;
 const jsonfile = require('jsonfile');
 
 const timestamp = new Date().getTime();
+const l = String(timestamp).length;
 const name = process.argv[3] || `Token ${timestamp}`;
-const symbol = process.argv[4] || 'T' + String(timestamp).substring(0, 4);
+const symbol = process.argv[4] || 'T' + String(timestamp).substring(l-4, l);
 const decimals = process.argv[5] || 0;
 const supply = process.argv[6] || 1000;
 

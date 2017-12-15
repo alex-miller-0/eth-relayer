@@ -11,13 +11,15 @@
     "eth-relayer-manager": "daemon/manager"
   },
   "scripts": {
+    "postinstall": "truffle install tokens",
     "create-token": "node scripts/createToken.js",
     "test": "node test.js",
     "fix": "eslint --fix",
     "lint": "eslint",
     "gen-config": "node scripts/genConfig.js",
     "start": "daemon/manager",
-    "parity": "node scripts/parity.js"
+    "parity": "node scripts/parity.js",
+    "migrate": "truffle --network origin migrate && truffle --network destination migrate && rm -rf build && truffle --network destination migrate"
   },
   "repository": {
     "type": "git",

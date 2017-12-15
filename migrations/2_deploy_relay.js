@@ -15,6 +15,7 @@ try {
 
 const save = async function save(deployer) {
   const network_id = deployer.network_id;
+  console.log('deployer.network_id', deployer.network_id)
   const network = truffleConfig.networks[deployer.network];
   const host = `http://${network.host}:${network.port}`;
   const relay = await TrustedRelay.deployed();
