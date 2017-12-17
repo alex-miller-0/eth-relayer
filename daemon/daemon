@@ -58,9 +58,9 @@ const relaySub = wsContract.events.RelayedDeposit({}, (err, evt) => {
 
 // Listen for messages
 process.on('message', (m) => {
-  console.log(wsHost, m)
   if (m.type == 'deposit') {
     // Deposit message is played to the destination chain
+    console.log('Looking for mapping on deposit.')
     query.findTokenMapping(m.body.fromChain, m.body.oldToken, wsContract)
     .then((mapping) => {
       if (!mapping) {

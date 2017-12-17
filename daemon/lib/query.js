@@ -40,6 +40,7 @@ function getSig(txHash, web3) {
 function findTokenMapping(fromChain, fromToken, contract) {
   return new Promise((resolve, reject) => {
     contract.methods.getTokenMapping(fromChain, fromToken).call({}, (err, res) => {
+      console.log('findTokenMapping. fromChain=', fromChain, 'fromToken', fromToken, 'result', res);
       if (err) { return reject(err); }
       if (res == zeroAddr) { return resolve(null); }
       return resolve(res);
