@@ -90,11 +90,13 @@ process.on('message', (m) => {
     })
   } else if (m.type == 'tokenRes') {
     let newToken;
+    let newTokenAddr;
     // If the destination chain needs to deploy a token to set a mapping, it
     // will get token info, deploy, and then create a mapping.
     query.createContract(m.body.token, signer, addr, web3ws)
-    .then((newTokenAddr) => {
-      console.log('token created', newTokenAddr)
+    .then((_newTokenAddr) => {
+      console.log('token created', _newTokenAddr);
+      newTokenAddr = _newTokenAddr;
       // Once the token is created, create the mapping
       return query.createTokenMapping(m.body.oldTokenAddr, newTokenAddr, m.from, wsContract)
     })
@@ -105,9 +107,16 @@ process.on('message', (m) => {
     })
     .then((receipt) => {
       console.log('Relayed message transferring ', newToken);
+      // Tell the other chain to make a mapping mirroring this one
+      const mBody = { oldTokenAddr: newTokenAddr, newTokenAddr: m.body.oldTokenAddr };
+      process.send({ type: 'mapping', to: m.from, from: addr, body: mBody })
     })
     .catch((err) => { throw err; })
-
+  } else if (m.type == 'mapping') {
+    query.createTokenMapping(m.body.oldTokenAddr, m.body.newTokenAddr, m.from, wsContract)
+    .then(() => {
+      console.log(`${addr} created new token mapping for ${m.from}->${m.body.oldTokenAddr}->${m.body.newTokenAddr}`)
+    })
   }
 
 })
