@@ -93,6 +93,7 @@ contract TrustedRelay {
   // data = [ fee, timestamp ]
   function depositEther(bytes32 m, uint8 v, bytes32 r, bytes32 s, address toChain, uint[2] data)
   public payable noKill notPlayed(m) {
+    played[m] = true;
     assert(data[1] >= now && data[1] - now < tolerance); // check timestamp
     assert(etherAllowed == true);
     assert(msg.value > 0);
@@ -102,7 +103,6 @@ contract TrustedRelay {
     address sender = hashChecks(m, v, r, s, [address(0), msg.sender], amount, [address(this), toChain], data);
     assert(sender == msg.sender);
     Deposit(sender, address(0), toChain, msg.value, data[0], data[1], now);
-    played[m] = true;
   }
 
   // Relayer only
@@ -111,6 +111,7 @@ contract TrustedRelay {
   // data = [ fee, timestamp ]
   function relayDeposit(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, address fromChain, uint[2] data)
   isOwner public notPlayed(m) {
+    played[m] = true;
     address sender = hashChecks(m, v, r, s, addrs, amount, [fromChain, address(this)], data);
     assert(sender == addrs[1]);
     if (ethTokens[fromChain] == addrs[0] && address(addrs[0]) != address(0)) {
@@ -128,7 +129,6 @@ contract TrustedRelay {
       t.transfer(msg.sender, data[0]);
       RelayedDeposit(sender, tokens[fromChain][addrs[0]], fromChain, addrs[0], amount, data[0], data[1], now);
     }
-    played[m] = true;
   }
 
   // If there is not a matching token on the other chain or some other error
@@ -143,6 +143,7 @@ contract TrustedRelay {
   // sig = [ hash, r, s ]
   // data = [ fee, timestamp ]
   function undoDeposit(bytes32[5] sig, uint8[2] v, address[2] addrs, uint amount, address toChain, uint[2] data) public {
+    undone[sig[0]] = true;
     assert(played[sig[0]] == true);
     assert(undone[sig[0]] == false);
     address sender = hashChecks(sig[0], v[0], sig[1], sig[2], addrs, amount, [address(this), toChain], data);
@@ -156,7 +157,6 @@ contract TrustedRelay {
       t.transfer(sender, amount);
     }
     UndoDeposit(sender, addrs[0], toChain, relayer, amount, data[0], data[1], now);
-    undone[sig[0]] = true;
   }
 
 
