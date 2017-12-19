@@ -6,6 +6,7 @@ const Promise = require('bluebird').Promise;
 const Web3 = require('Web3');
 const signing = require('./lib/signing.js');
 const query = require('./lib/query.js');
+const util = requite('./lib/util.js');
 
 // Setup a web3 websocket instance
 const wsHost = process.argv[2];
@@ -72,7 +73,7 @@ process.on('message', (m) => {
       } else {
         return query.relayMessage(m.body, wsContract)
         .then((receipt) => {
-          console.log('Relayed message transferring', mapping);
+          console.log('Relayed message transferring', receipt);
         })
         .catch((err) => { throw err; })
       }

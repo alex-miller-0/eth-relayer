@@ -2,17 +2,22 @@
 const zeroAddr = '0x0000000000000000000000000000000000000000';
 const tokenAbi = require('../../build/contracts/HumanStandardToken.json').abi;
 const tokenBytes = require('../../build/contracts/HumanStandardToken.json').bytecode;
+const util = require('./util.js');
 let sender;
 
 function setSender(_sender) { sender = _sender;}
 
 function relayMessage(msg, contract) {
   return new Promise((resolve, reject) => {
-    contract.methods.relayDeposit(msg.sig.m, msg.sig.v, msg.sig.r, msg.sig.s,
-      [msg.oldToken, msg.sender], msg.amount, msg.fromChain, [msg.fee, msg.timestamp])
-      .send({ from: sender, gas: 500000 })
-      .then((receipt) => { return resolve(receipt); })
-      .catch((err) => { return reject(err); })
+    if (util.checkApprovedToken(msg.oldToken, msg.fee)) {
+      contract.methods.relayDeposit(msg.sig.m, msg.sig.v, msg.sig.r, msg.sig.s,
+        [msg.oldToken, msg.sender], msg.amount, msg.fromChain, [msg.fee, msg.timestamp])
+        .send({ from: sender, gas: 500000 })
+        .then((receipt) => { return resolve(receipt); })
+        .catch((err) => { return reject(err); })
+    } else {
+      return resolve(`Token ${msg.oldToken} is not supported for relay on this chain or fee is too low.`)
+    }
   })
 }
 
