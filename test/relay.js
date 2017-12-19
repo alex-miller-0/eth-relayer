@@ -34,6 +34,7 @@ let etherToken = null;
 
 let d;
 let sig;
+let sigRelayer;
 let hash;
 let wallets = [];
 
@@ -202,6 +203,7 @@ contract('TrustedRelay', (accounts) => {
       d.ts = parseInt(now.toString(), 10) + 1;
       hash = hashData(d);
       sig = sign(hash, wallets[1]);
+      sigRelayer = sign(hash, wallets[0]);
 
       // const thash = await parentRelay.testHash(d.destChain, d.origChain, d.amount, d.token,
       //   [d.fee, d.ts], { from: accounts[1] });
@@ -214,7 +216,8 @@ contract('TrustedRelay', (accounts) => {
     });
 
     it('should relay the message', async () => {
-      await childRelay.methods.relayDeposit(hash, sig.v, sig.r, sig.s,
+      await childRelay.methods.relayDeposit(hash, [sig.v, sigRelayer.v],
+        [sig.r, sigRelayer.r], [sig.s, sigRelayer.s],
         [d.token, d.sender], d.amount, d.origChain,
         [d.fee, d.ts]).send({ from: accounts[0], gas: 300000 });
       const balance = await childToken.methods.balanceOf(childRelay.options.address).call();
@@ -225,7 +228,8 @@ contract('TrustedRelay', (accounts) => {
 
     it('should fail to relay the message a second time', async () => {
       try {
-        await childRelay.methods.relayDeposit(hash, sig.v, sig.r, sig.s,
+        await childRelay.methods.relayDeposit(hash, [sig.v, sigRelayer.v],
+          [sig.r, sigRelayer.r], [sig.s, sigRelayer.s],
           [d.token, d.sender], d.amount, d.origChain,
           [d.fee, d.ts]).send({ from: accounts[0], gas: 300000 });
       } catch (err) {
@@ -327,6 +331,7 @@ contract('TrustedRelay', (accounts) => {
       };
       hash = hashData(deposit);
       sig = sign(hash, wallets[1]);
+      sigRelayer = sign(hash, wallets[0]);
       await parentRelay.depositERC20(hash, sig.v, sig.r, sig.s, deposit.token,
         deposit.amount, deposit.destChain, [deposit.fee, deposit.ts],
         { from: accounts[1] });
@@ -335,7 +340,8 @@ contract('TrustedRelay', (accounts) => {
     });
 
     it('should relay the message to the destination chain', async () => {
-      await childRelay.methods.relayDeposit(hash, sig.v, sig.r, sig.s,
+      await childRelay.methods.relayDeposit(hash, [sig.v, sigRelayer.v],
+        [sig.r, sigRelayer.r], [sig.s, sigRelayer.s],
         [deposit.token, deposit.sender], deposit.amount, deposit.origChain,
         [deposit.fee, deposit.ts]).send({ from: accounts[0], gas: 300000 });
       const relayBalance = await web3.eth.getBalance(childRelay.options.address);
@@ -377,6 +383,7 @@ contract('TrustedRelay', (accounts) => {
       };
       hash = hashData(deposit2);
       sig = sign(hash, wallets[1]);
+      sigRelayer = sign(hash, wallets[0]);
       await childRelay.methods.depositEther(hash, sig.v, sig.r, sig.s, deposit2.destChain,
         [deposit2.fee, deposit2.ts]).send({ from: accounts[1], value: toSend });
 
@@ -396,7 +403,8 @@ contract('TrustedRelay', (accounts) => {
       const userBalBefore = userBalBeforeTmp.toString();
       // const relayBalBeforeTmp = await etherToken.balanceOf(parentRelay.address);
       // const relayBalBefore = relayBalBeforeTmp.toString();
-      await parentRelay.relayDeposit(hash, sig.v, sig.r, sig.s,
+      await parentRelay.relayDeposit(hash, [sig.v, sigRelayer.v],
+        [sig.r, sigRelayer.r], [sig.s, sigRelayer.s],
         [deposit2.token, deposit2.sender], deposit2.amount, deposit2.origChain,
         [deposit2.fee, deposit2.ts], { from: accounts[0], gas: 300000 });
 
@@ -439,6 +447,7 @@ contract('TrustedRelay', (accounts) => {
       };
       hash = hashData(dep);
       sig = sign(hash, wallets[1]);
+      sigRelayer = sign(hash, wallets[0]);
       await childRelay.methods.depositERC20(hash, sig.v, sig.r, sig.s, dep.token,
         dep.amount, dep.destChain, [dep.fee, dep.ts]).send({ from: accounts[1] });
       const relayBal = await childToken.methods.balanceOf(childRelay.options.address).call();
@@ -459,7 +468,8 @@ contract('TrustedRelay', (accounts) => {
       const relayBalBeforeTmp = await parentToken.balanceOf(parentRelay.address);
       const relayBalBefore = parseInt(relayBalBeforeTmp.toString(), 10);
 
-      await parentRelay.relayDeposit(hash, sig.v, sig.r, sig.s,
+      await parentRelay.relayDeposit(hash, [sig.v, sigRelayer.v],
+        [sig.r, sigRelayer.r], [sig.s, sigRelayer.s],
         [dep.token, dep.sender], dep.amount, dep.origChain,
         [dep.fee, dep.ts], { from: accounts[0], gas: 300000 });
 
@@ -483,7 +493,7 @@ contract('TrustedRelay', (accounts) => {
 
       await childRelay.methods.undoDeposit([hash, sig.r, sig.s, relayerSig.r,
         relayerSig.s], [sig.v, relayerSig.v], [dep.token, dep.sender], dep.amount,
-      dep.destChain, [dep.fee, dep.ts]).send({ from: accounts[1] });
+      dep.destChain, [dep.fee, dep.ts]).send({ from: accounts[1], gas: 500000 });
 
       const userAfterTmp = await childToken.methods.balanceOf(dep.sender).call();
       const userAfter = parseInt(userAfterTmp.toString(), 10);

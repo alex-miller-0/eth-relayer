@@ -105,15 +105,18 @@ contract TrustedRelay {
     Deposit(sender, address(0), toChain, msg.value, data[0], data[1], now);
   }
 
-  // Relayer only
-  // Unfreeze tokens on this chain.
+  // Relay a signed message (deposit). This can be called by any address, but must
+  // contain signatures from both the user and an owner (i.e. a relayer).
+  // v, r, s -> [0] = user, [1] = relayer
   // addrs = [ token, originalSender ]
   // data = [ fee, timestamp ]
-  function relayDeposit(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, address fromChain, uint[2] data)
+  function relayDeposit(bytes32 m, uint8[2] v, bytes32[2] r, bytes32[2] s, address[2] addrs, uint amount, address fromChain, uint[2] data)
   isOwner public notPlayed(m) {
     played[m] = true;
-    address sender = hashChecks(m, v, r, s, addrs, amount, [fromChain, address(this)], data);
+    address sender = hashChecks(m, v[0], r[0], s[0], addrs, amount, [fromChain, address(this)], data);
+    address relayer = hashChecks(m, v[1], r[1], s[1], addrs, amount, [fromChain, address(this)], data);
     assert(sender == addrs[1]);
+    assert(owners[relayer] == true);
     if (ethTokens[fromChain] == addrs[0] && address(addrs[0]) != address(0)) {
       // If this is an eth token, reward ether on this chain
       sender.transfer(ethMultipliers[fromChain] * (amount-data[0]));
@@ -143,9 +146,9 @@ contract TrustedRelay {
   // sig = [ hash, r, s ]
   // data = [ fee, timestamp ]
   function undoDeposit(bytes32[5] sig, uint8[2] v, address[2] addrs, uint amount, address toChain, uint[2] data) public {
-    undone[sig[0]] = true;
     assert(played[sig[0]] == true);
     assert(undone[sig[0]] == false);
+    undone[sig[0]] = true;
     address sender = hashChecks(sig[0], v[0], sig[1], sig[2], addrs, amount, [address(this), toChain], data);
     address relayer = hashChecks(sig[0], v[1], sig[3], sig[4], addrs, amount, [address(this), toChain], data);
     assert(owners[relayer] == true);
