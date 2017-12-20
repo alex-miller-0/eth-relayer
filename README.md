@@ -101,7 +101,7 @@ npm run test
 If you want to run the relayer daemon, you need to use Parity or Geth, as the daemon uses web3.js 1.0 event pub/sub and websocket listening is not allowed in TestRPC/Ganache. I have included a convenience script to boot one or more parity nodes locally given a series of ports. You can run it with:
 
 ```
-npm run party <port1> <port2> ... <portN>
+npm run parity <port1> <port2> ... <portN>
 ```
 
 *NOTE: Ports must be 4+ integers apart!*
