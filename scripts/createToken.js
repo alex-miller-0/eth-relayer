@@ -22,7 +22,7 @@ const symbol = process.argv[4] || 'T' + String(timestamp).substring(l-4, l);
 const decimals = process.argv[5] || 0;
 const supply = process.argv[6] || 1000;
 
-const networkId = networks.networks[network].value;
+const networkId = networks.networks[network].value.toLowerCase();
 
 const hdwallet = hdkey.fromMasterSeed(bip39.mnemonicToSeed(secrets.mnemonic));
 const node = hdwallet.derivePath(secrets.hdPath + '1'); // Generating from accounts[1]
@@ -36,7 +36,7 @@ Token.deploy({
   from: addr,
   gas: 4000000,
 }).then((contract) => {
-  const contractAddr = contract.options.address;
+  const contractAddr = contract.options.address.toLowerCase();
   Object.keys(networks.networks).forEach((key) => {
     if (key != network) {
       const base = networks.networks[key];

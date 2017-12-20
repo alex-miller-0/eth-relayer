@@ -3,14 +3,18 @@ const zeroAddr = '0x0000000000000000000000000000000000000000';
 const tokenAbi = require('../../build/contracts/HumanStandardToken.json').abi;
 const tokenBytes = require('../../build/contracts/HumanStandardToken.json').bytecode;
 const util = require('./util.js');
+const signing = require('./signing.js');
 let sender;
 
 function setSender(_sender) { sender = _sender;}
 
-function relayMessage(msg, contract) {
+function relayMessage(curNet, msg, contract) {
   return new Promise((resolve, reject) => {
-    if (util.checkApprovedToken(msg.oldToken, msg.fee)) {
-      contract.methods.relayDeposit(msg.sig.m, msg.sig.v, msg.sig.r, msg.sig.s,
+    const relay = util.checkApprovedToken(curNet, msg.fromChain, msg.oldToken, msg.fee);
+    if (relay) {
+      const sig = signing.sign(msg.sig.m);
+      contract.methods.relayDeposit(msg.sig.m, [msg.sig.v, sig.v], [msg.sig.r, sig.r],
+        [msg.sig.s, sig.s],
         [msg.oldToken, msg.sender], msg.amount, msg.fromChain, [msg.fee, msg.timestamp])
         .send({ from: sender, gas: 500000 })
         .then((receipt) => { return resolve(receipt); })
@@ -45,7 +49,6 @@ function getSig(txHash, web3) {
 function findTokenMapping(fromChain, fromToken, contract) {
   return new Promise((resolve, reject) => {
     contract.methods.getTokenMapping(fromChain, fromToken).call({}, (err, res) => {
-      console.log('findTokenMapping. fromChain=', fromChain, 'fromToken', fromToken, 'result', res);
       if (err) { return reject(err); }
       if (res == zeroAddr) { return resolve(null); }
       return resolve(res);
