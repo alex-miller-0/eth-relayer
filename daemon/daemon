@@ -46,7 +46,7 @@ const depositSub = wsContract.events.Deposit({}, (err, evt) => {
   query.getSig(evt.transactionHash, web3ws)
   .then((sig) => {
     tmp.sig = sig;
-    return deposit(tmp)
+    return record(tmp, 'deposit')
   })
   .then(() => {
     process.send({ type: 'deposit', to: d.toChain, body: tmp });
@@ -65,7 +65,6 @@ const relaySub = wsContract.events.RelayedDeposit({}, (err, evt) => {
 process.on('message', (m) => {
   if (m.type == 'deposit') {
     // Deposit message is played to the destination chain
-    console.log('Looking for mapping on deposit.')
     query.findTokenMapping(m.body.fromChain, m.body.oldToken, wsContract)
     .then((mapping) => {
       if (!mapping) {
@@ -76,6 +75,19 @@ process.on('message', (m) => {
         return;
       } else {
         return query.relayMessage(m.to, m.body, wsContract)
+        .then((receipt) => {
+          console.log('relayed', receipt)
+          console.log('m.body.relay', m.body)
+          const data = {
+            txId: receipt.transactionHash,
+            v: 27,
+            r: '0x0',
+            s: '0x0',
+            hash: m.body.sig.m,
+          }
+          console.log('data', data)
+          return record(data, 'relay')
+        })
         .then((receipt) => {
           console.log('Relayed message transferring', receipt);
         })
@@ -111,7 +123,15 @@ process.on('message', (m) => {
       return query.relayMessage(m.to, m.body.relay, wsContract)
     })
     .then((receipt) => {
-      console.log('Relayed message transferring ', newToken);
+      console.log('relay receipt', receipt)
+      const data = {
+        txId: receipt.txId,
+        v: 27,
+        r: '0x0',
+        s: '0x0',
+        hash: m.body.relay.sig.m,
+      }
+      return record(data, 'relay')
       // Tell the other chain to make a mapping mirroring this one
       const mBody = { oldTokenAddr: newTokenAddr, newTokenAddr: m.body.oldTokenAddr };
       process.send({ type: 'mapping', to: m.from, from: addr, body: mBody })
@@ -126,13 +146,15 @@ process.on('message', (m) => {
 
 })
 
-function deposit(evt) {
+
+function record(data, route) {
   return new Promise((resolve, reject) => {
-    console.log('sending evt', evt)
+    console.log('sending data', data)
+    console.log('route', route)
     request({
       method: 'POST',
-      uri: `${server}/deposit`,
-      form: evt
+      uri: `${server}/${route}`,
+      form: data
     }, (err, res) => {
       console.log('got a result!')
       if (err) return reject(err);

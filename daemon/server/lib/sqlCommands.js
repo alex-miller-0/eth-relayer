@@ -11,12 +11,26 @@ function deposit(evt) {
   return m;
 }
 
+function relay(data) {
+  const m = `INSERT INTO Relays (hash, relayerR, relayerS, relayerV, txId) VALUES (
+    ${data.hash}, ${data.sig.r}, ${dat.sig.s}, ${parseInt(data.sig.v) - 27},
+    ${data.txId})`;
+  return m;
+}
+
 function getDeposits(data) {
-  console.log('data', data.sender.toLowerCase())
   let m = `SELECT * FROM Deposits WHERE sender='${data.sender.toLowerCase()}'`;
   if (data.pending) { m += ' AND relayId IS NULL' };
   m += ` LIMIT ${data.n || 100}`;
   return m;
+}
+
+function getDepositId(hash) {
+  return `SELECT id FROM Deposits WHERE hash='${hash}'`;
+}
+
+function getRelayId(hash) {
+  return `SELECT id FROM Relays WHERE hash='${hash}'`
 }
 
 const createDeposits = 'CREATE TABLE IF NOT EXISTS Deposits ( \
@@ -33,21 +47,21 @@ const createDeposits = 'CREATE TABLE IF NOT EXISTS Deposits ( \
   amount INTEGER, \
   relayId INTEGER, \
   timestamp INTEGER, \
+  txId VARCHAR(66), \
   createdAt DATETIME DEFAULT CURRENT_TIMESTAMP \
 )';
 
 const createRelays = 'CREATE TABLE IF NOT EXISTS Relays ( \
   id INTEGER PRIMARY KEY AUTOINCREMENT, \
-  sender VARCHAR(64), \
-  toChain VARCHAR(64), \
-  fromChain VARCHAR(64), \
-  amount INTEGER, \
   depositId INTEGER, \
-  timestamp INTEGER, \
+  txId VARCHAR(66), \
   createdAt DATETIME DEFAULT CURRENT_TIMESTAMP \
 )';
 
 exports.deposit = deposit;
+exports.relay = relay;
 exports.getDeposits = getDeposits;
+exports.getDepositId = getDepositId;
+exports.getRelayId = getRelayId;
 exports.createDeposits = createDeposits;
 exports.createRelays = createRelays;

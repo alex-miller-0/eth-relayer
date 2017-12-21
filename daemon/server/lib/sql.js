@@ -14,7 +14,7 @@ function run(data, f) {
   return new Promise((resolve, reject) => {
     const cmd = f(data);
     db.run(cmd);
-    return;
+    return resolve(true);
   })
 }
 
