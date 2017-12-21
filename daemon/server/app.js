@@ -19,11 +19,27 @@ app.post('/deposit', (req, res) => {
 })
 
 app.post('/relay', (req, res) => {
-  sql.query(req.body.hash, commands.getDepositId)
+  let depositId;
+  let relayId;
+  let data = req.body;
+  console.log('relay')
+  sql.query(data.hash, commands.getDepositId)
   .then((_id) => {
-    const id = _id.length > 0 ? _id[0].id : '';
-    req.body.depositId = id;
-    return sql.run(req.body, commands.relay)
+    depositId = _id.length > 0 ? _id[0].id : '';
+    data.depositId = depositId;
+    return sql.run(data, commands.relay)
+  })
+  .then(() => {
+    console.log('ran')
+    return sql.query(data.hash, commands.getRelayId)
+  })
+  .then((_id) => {
+    console.log('relayId', _id)
+    relayId = _id.length > 0 ? _id[0].id : '';
+    return sql.run({ relayId, depositId }, commands.insertRelayId)
+  })
+  .then(() => {
+    return sql.run({ relayId, depositId }, commands.insertDepositId)
   })
   .then(() => { res.send({ status: 200, success: true }); })
   .catch((err) => { res.send({ status: 500, error: err }); })

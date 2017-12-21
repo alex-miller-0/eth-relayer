@@ -12,14 +12,27 @@ function deposit(evt) {
 }
 
 function relay(data) {
+  console.log('commands.relay', data)
   const m = `INSERT INTO Relays (hash, relayerR, relayerS, relayerV, txId) VALUES (
-    ${data.hash}, ${data.sig.r}, ${dat.sig.s}, ${parseInt(data.sig.v) - 27},
-    ${data.txId})`;
+    '${data.hash}', '${data.r}', '${data.s}', '${parseInt(data.v) - 27}',
+    '${data.txId}')`;
+  console.log(m);
+  return m;
+}
+
+function insertRelayId(data) {
+  const m = `UPDATE Deposits SET relayId=${data.relayId} WHERE id=${data.depositId}`;
+  return m;
+}
+
+function insertDepositId(data) {
+  const m = `UPDATE Relays SET depositId=${data.depositId} WHERE id=${data.relayId}`;
   return m;
 }
 
 function getDeposits(data) {
-  let m = `SELECT * FROM Deposits WHERE sender='${data.sender.toLowerCase()}'`;
+  let m = `SELECT * FROM Deposits LEFT JOIN Relays ON Relays.id=Deposits.relayId
+    WHERE Deposits.sender='${data.sender.toLowerCase()}'`;
   if (data.pending) { m += ' AND relayId IS NULL' };
   m += ` LIMIT ${data.n || 100}`;
   return m;
@@ -53,8 +66,12 @@ const createDeposits = 'CREATE TABLE IF NOT EXISTS Deposits ( \
 
 const createRelays = 'CREATE TABLE IF NOT EXISTS Relays ( \
   id INTEGER PRIMARY KEY AUTOINCREMENT, \
+  hash VARCHAR(66), \
   depositId INTEGER, \
   txId VARCHAR(66), \
+  relayerR VARCHAR(66), \
+  relayerS VARCHAR(66), \
+  relayerV TINYINT(1), \
   createdAt DATETIME DEFAULT CURRENT_TIMESTAMP \
 )';
 
@@ -63,5 +80,7 @@ exports.relay = relay;
 exports.getDeposits = getDeposits;
 exports.getDepositId = getDepositId;
 exports.getRelayId = getRelayId;
+exports.insertDepositId = insertDepositId;
+exports.insertRelayId = insertRelayId;
 exports.createDeposits = createDeposits;
 exports.createRelays = createRelays;
