@@ -76,16 +76,15 @@ process.on('message', (m) => {
       } else {
         return query.relayMessage(m.to, m.body, wsContract)
         .then((receipt) => {
-          console.log('relayed', receipt)
-          console.log('m.body.relay', m.body)
+          const sig = signing.hashAndSign(m.body);
+          if (sig.hash != m.body.sig.m) { throw Error('Error hashing data.'); }
           const data = {
             txId: receipt.transactionHash,
-            v: 27,
-            r: '0x0',
-            s: '0x0',
+            v: sig.v,
+            r: sig.r,
+            s: sig.s,
             hash: m.body.sig.m,
           }
-          console.log('data', data)
           return record(data, 'relay')
         })
         .then((receipt) => {
@@ -123,12 +122,13 @@ process.on('message', (m) => {
       return query.relayMessage(m.to, m.body.relay, wsContract)
     })
     .then((receipt) => {
-      console.log('relay receipt', receipt)
+      const sig = signing.hashAndSign(m.body.relay);
+      if (sig.hash != m.body.relay.sig.m) { throw Error('Error hashing data.'); }
       const data = {
-        txId: receipt.txId,
-        v: 27,
-        r: '0x0',
-        s: '0x0',
+        txId: receipt.transactionHash,
+        v: sig.v,
+        r: sig.r,
+        s: sig.s,
         hash: m.body.relay.sig.m,
       }
       return record(data, 'relay')
