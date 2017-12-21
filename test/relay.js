@@ -80,9 +80,9 @@ contract('TrustedRelay', (accounts) => {
     const f = data.sender.slice(2);
     const g = leftPad(data.fee.toString(16), 64, '0');
     const h = leftPad(data.ts.toString(16), 64, '0');
-    const msg = `${a}${b}${c}${e}${f}${g}${h}`;
+    let msg = `${a}${b}${c}${e}${f}${g}${h}`;
+    if (data.undo) { msg += leftPad(1, 64, '0'); }
     const personal = util.hashPersonalMessage(Buffer.from(msg, 'hex'));
-    // console.log('personal', personal.toString('hex'));
     return `0x${personal.toString('hex')}`;
   }
 
@@ -104,7 +104,6 @@ contract('TrustedRelay', (accounts) => {
     it('should check for networks file', async () => {
       try {
         networks = jsonfile.readFileSync(NETWORK_F);
-        console.log('networks', networks);
       } catch (e) {
         networks = null;
       }
@@ -489,10 +488,13 @@ contract('TrustedRelay', (accounts) => {
         .call();
       const relayBefore = parseInt(relayBeforeTmp.toString(), 10);
 
-      const relayerSig = sign(hash, wallets[0]);
+      dep.undo = true;
+      const undoHash = hashData(dep);
+      const undoSig = sign(undoHash, wallets[1]);
+      const relayerSig = sign(undoHash, wallets[0]);
 
-      await childRelay.methods.undoDeposit([hash, sig.r, sig.s, relayerSig.r,
-        relayerSig.s], [sig.v, relayerSig.v], [dep.token, dep.sender], dep.amount,
+      await childRelay.methods.undoDeposit([hash, undoHash, undoSig.r, undoSig.s, relayerSig.r,
+        relayerSig.s], [undoSig.v, relayerSig.v], [dep.token, dep.sender], dep.amount,
       dep.destChain, [dep.fee, dep.ts]).send({ from: accounts[1], gas: 500000 });
 
       const userAfterTmp = await childToken.methods.balanceOf(dep.sender).call();

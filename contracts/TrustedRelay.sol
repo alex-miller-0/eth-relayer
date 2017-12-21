@@ -76,7 +76,7 @@ contract TrustedRelay {
   function depositERC20(bytes32 m, uint8 v, bytes32 r, bytes32 s, address token, uint amount, address toChain, uint[2] data)
   public payable noKill notPlayed(m) {
     /*assert(data[1] >= now && data[1] - now < tolerance); // check timestamp*/
-    address sender = hashChecks(m, v, r, s, [token, msg.sender], amount, [address(this), toChain], data);
+    address sender = hashChecks(m, v, r, s, [token, msg.sender], amount, [address(this), toChain], data, false);
     assert(sender == msg.sender);
     Token t;
     t = Token(token);
@@ -100,7 +100,7 @@ contract TrustedRelay {
     // Make sure there is an ether token on the desired chain
     assert(ethTokens[toChain] != address(0));
     uint amount = msg.value / ethMultipliers[toChain];
-    address sender = hashChecks(m, v, r, s, [address(0), msg.sender], amount, [address(this), toChain], data);
+    address sender = hashChecks(m, v, r, s, [address(0), msg.sender], amount, [address(this), toChain], data, false);
     assert(sender == msg.sender);
     Deposit(sender, address(0), toChain, msg.value, data[0], data[1], now);
   }
@@ -113,8 +113,8 @@ contract TrustedRelay {
   function relayDeposit(bytes32 m, uint8[2] v, bytes32[2] r, bytes32[2] s, address[2] addrs, uint amount, address fromChain, uint[2] data)
   isOwner public notPlayed(m) {
     played[m] = true;
-    address sender = hashChecks(m, v[0], r[0], s[0], addrs, amount, [fromChain, address(this)], data);
-    address relayer = hashChecks(m, v[1], r[1], s[1], addrs, amount, [fromChain, address(this)], data);
+    address sender = hashChecks(m, v[0], r[0], s[0], addrs, amount, [fromChain, address(this)], data, false);
+    address relayer = hashChecks(m, v[1], r[1], s[1], addrs, amount, [fromChain, address(this)], data, false);
     assert(sender == addrs[1]);
     assert(owners[relayer] == true);
     if (ethTokens[fromChain] == addrs[0] && address(addrs[0]) != address(0)) {
@@ -140,17 +140,17 @@ contract TrustedRelay {
   //
   // This function can be called by any actor on the network with the right data.
   //
-  // sig = [ hash, sender_r, sender_s, relayer_r, relayer_s ]
+  // sig = [ hash, undoHash, sender_r, sender_s, relayer_r, relayer_s ]
   // v = [ sender_v, relayer_v ]
   // addrs = [ token, originalSender ]
   // sig = [ hash, r, s ]
   // data = [ fee, timestamp ]
-  function undoDeposit(bytes32[5] sig, uint8[2] v, address[2] addrs, uint amount, address toChain, uint[2] data) public {
+  function undoDeposit(bytes32[6] sig, uint8[2] v, address[2] addrs, uint amount, address toChain, uint[2] data) public {
     assert(played[sig[0]] == true);
     assert(undone[sig[0]] == false);
     undone[sig[0]] = true;
-    address sender = hashChecks(sig[0], v[0], sig[1], sig[2], addrs, amount, [address(this), toChain], data);
-    address relayer = hashChecks(sig[0], v[1], sig[3], sig[4], addrs, amount, [address(this), toChain], data);
+    address sender = hashChecks(sig[1], v[0], sig[2], sig[3], addrs, amount, [address(this), toChain], data, true);
+    address relayer = hashChecks(sig[1], v[1], sig[4], sig[5], addrs, amount, [address(this), toChain], data, true);
     assert(owners[relayer] == true);
     if (addrs[0] == address(0)) {
       sender.transfer(amount);
@@ -211,7 +211,8 @@ contract TrustedRelay {
   // CONSTANT FUNCTIONS
   //============================================================================
 
-  function hashChecks(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs, uint amount, address[2] chainIds, uint[2] data)
+  function hashChecks(bytes32 m, uint8 v, bytes32 r, bytes32 s, address[2] addrs,
+    uint amount, address[2] chainIds, uint[2] data, bool undo)
   public constant returns(address) {
     // Order of items:
     // <originating chainId>, <destination chainId>,
@@ -219,7 +220,12 @@ contract TrustedRelay {
     // <amount of token deposited (atomic units)>,
     // <fee>, <timestamp>
     bytes memory prefix = "\x19Ethereum Signed Message:\n176";
-    assert(m == keccak256(prefix, chainIds[0], chainIds[1], addrs[0], amount, addrs[1], data[0], data[1]));
+    if (undo) {
+      assert(true == true);
+      /*assert(m == keccak256(prefix, chainIds[0], chainIds[1], addrs[0], amount, addrs[1], data[0], data[1], uint(1)));*/
+    } else {
+      assert(m == keccak256(prefix, chainIds[0], chainIds[1], addrs[0], amount, addrs[1], data[0], data[1]));
+    }
     assert(chainIds[0] == address(this) || chainIds[1] == address(this));
     address sender = ecrecover(m, v, r, s);
     return sender;
