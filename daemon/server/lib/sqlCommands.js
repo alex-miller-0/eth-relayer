@@ -31,9 +31,15 @@ function insertDepositId(data) {
 }
 
 function getDeposits(data) {
-  let m = `SELECT * FROM Deposits LEFT JOIN Relays ON Relays.id=Deposits.relayId
+  let m = `SELECT Deposits.id, Deposits.fee, Deposits.hash, Deposits.oldToken,
+    Deposits.relayId, Relays.relayerR, Relays.relayerS, Relays.relayerV,
+    Deposits.sender, Deposits.senderR, Deposits.senderS, Deposits.senderV,
+    Deposits.timestamp, Deposits.toChain, Deposits.txId, Deposits.amount,
+    Deposits.fromChain
+    FROM Deposits LEFT JOIN Relays ON Relays.id=Deposits.relayId
     WHERE Deposits.sender='${data.sender.toLowerCase()}'`;
   if (data.pending) { m += ' AND relayId IS NULL' };
+  if (data.toChain) { m += ` AND toChain='${data.toChain.toLowerCase()}'`}
   m += ` LIMIT ${data.n || 100}`;
   return m;
 }

@@ -4,12 +4,19 @@ const app = express();
 const sql = require('./lib/sql.js');
 const bodyParser = require('body-parser');
 const commands = require('./lib/sqlCommands.js');
+const signing = require('../lib/signing.js');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  next();
+});
+
+
 // Deposit tokens. Expects an event with args (see TrustedRelay.sol Deposit events)
 app.post('/deposit', (req, res) => {
-  console.log('deposit called', req.body)
   sql.run(req.body, commands.deposit)
   .then(() => {
     return sql.query(req.body.sig.m, commands.getDepositId)
@@ -18,11 +25,18 @@ app.post('/deposit', (req, res) => {
   .catch((err) => { res.send({ status: 500, error: err }); })
 })
 
+// Sign a message that can be used by a user to move the tokens. Must contain:
+// { fromChain, toChain, oldToken, sender, amount, fee, timestamp }
+app.get('/sign', (req, res) => {
+  const sig = signing.hashAndSign(req.query)
+  res.send({ status: 200, result: sig })
+})
+
+// Relay a message
 app.post('/relay', (req, res) => {
   let depositId;
   let relayId;
   let data = req.body;
-  console.log('relay')
   sql.query(data.hash, commands.getDepositId)
   .then((_id) => {
     depositId = _id.length > 0 ? _id[0].id : '';
@@ -30,11 +44,9 @@ app.post('/relay', (req, res) => {
     return sql.run(data, commands.relay)
   })
   .then(() => {
-    console.log('ran')
     return sql.query(data.hash, commands.getRelayId)
   })
   .then((_id) => {
-    console.log('relayId', _id)
     relayId = _id.length > 0 ? _id[0].id : '';
     return sql.run({ relayId, depositId }, commands.insertRelayId)
   })
@@ -48,6 +60,7 @@ app.post('/relay', (req, res) => {
 // Get deposits (all or pending)
 // {
 //   user: <string>     // 0x prefixed address
+//   toChainId: <string> // address of the Gateway in the toChain
 //   pending: <bool>    // if true, only return pending deposits (no relay_id)
 //   n: <string>        // (optional, default 100) max results returned
 // }
@@ -57,17 +70,6 @@ app.get('/deposits', (req, res) => {
   .catch((err) => { res.send({ status: 500, error: err }); })
 })
 
-// Get deposits (all or pending)
-// {
-//   user: <string>     // 0x prefixed address
-//   pending: <bool>    // if true, only return pending deposits (no relay_id)
-//   n: <string>        // (optional, default 100) max results returned
-// }
-// app.get('/relays', (req, res) => {
-//   sql.query(req.query, commands.getRelays)
-//   .then((rows) => { res.send({ status: 200, result: rows }); })
-//   .catch((err) => { res.send({ status: 500, error: err }); })
-// })
 
 // Start server
 const PORT = 3000;

@@ -118,6 +118,7 @@ process.on('message', (m) => {
     })
     .then((mapping) => {
       newToken = mapping;
+      console.log(`Creating mapping ${m.body.oldTokenAddr}->${m.from}->${newTokenAddr}`)
       // Once the mapping is created, move the tokens
       return query.relayMessage(m.to, m.body.relay, wsContract)
     })
