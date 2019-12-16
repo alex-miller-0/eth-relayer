@@ -1,5 +1,7 @@
 # TrustedRelay
 
+> This project is not maintained and has been deprecated in favor of superior designs. If you're interested in these types of things, check out [Plasma Group](https://github.com/plasma-group)'s cutting-edge work on Plasma, Optimistic Rollups, and more!
+
 This is a daemon to relay ERC20 tokens between EVM-based blockchains. The deployer of the smart contracts (`TrustedRelay.sol`) is the owner of the contract on the given chain. The contracts are networked together using a config file called `networks.json`, which is created when the contracts are deployed. The relayer daemon listens for `Deposit` events on every network it knows about (identified by the address of its TrustedRelay contract and connected to via its websocket provider) and uses those to call a relay function on the Gateway contract of the desired destination network.
 
 ## Pre-Requisites
